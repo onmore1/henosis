@@ -1,0 +1,71 @@
+﻿19:23:46.667  --- watchspike started ---
+19:23:46.679  watching:   C:\Users\achic\Documents\Image-Line\FL Studio\Projects\eltan
+19:23:46.689  log file:   C:\Users\achic\Desktop\henosis\henosis-milestone1\henosis\spike\watchspike-log.txt
+19:23:46.700  powershell: 5.1.26100.9818, window API: True
+19:23:46.709  Press Ctrl+C to stop.
+19:23:46.737  FL STUDIO  not running
+19:23:52.271  --- stopped ---
+19:26:07.317  --- watchspike started ---
+19:26:07.329  watching:   C:\Users\achic\Documents\Image-Line\FL Studio\Projects\eltan
+19:26:07.341  log file:   C:\Users\achic\Desktop\henosis\henosis-milestone1\henosis\spike\watchspike-log.txt
+19:26:07.355  powershell: 5.1.26100.9818, window API: True
+19:26:07.366  Press Ctrl+C to stop.
+19:26:07.416  FL STUDIO  FL64.exe pid 26236: "Problems loading the project", "eltan_new.flp - FL Studio 2025"
+19:26:13.721  FL STUDIO  FL64.exe pid 26236: "cz.zip - FL Studio 2025"
+19:26:20.026  FL STUDIO  FL64.exe pid 26236: "eltan.flp - FL Studio 2025"
+19:26:27.173  event  Created  eltan.flp~
+19:26:27.181  event  Changed  eltan.flp~
+19:26:27.192  event  Deleted  eltan.flp
+19:26:27.205  event  Changed  Backup  [ignored]
+19:26:27.219  event  Changed  Backup\eltan (overwritten at 19h26).flp  [ignored]
+19:26:27.233  event  Created  Backup\eltan (overwritten at 19h26).flp  [ignored]
+19:26:27.253  event  Renamed  eltan.flp  (was eltan.flp~)
+19:26:27.535  event  Created  eltan.flp~
+19:26:27.539  event  Changed  eltan.flp~
+19:26:27.554  event  Deleted  eltan.flp
+19:26:27.567  event  Created  Backup\eltan (overwritten at 19h26)_2.flp  [ignored]
+19:26:27.580  event  Changed  Backup  [ignored]
+19:26:27.594  event  Changed  Backup\eltan (overwritten at 19h26)_2.flp  [ignored]
+19:26:27.607  event  Renamed  eltan.flp  (was eltan.flp~)
+19:26:29.731  QUIET for 2 s after changes to 2 path(s)
+19:26:29.783    SAVE DETECTED  eltan.flp  189098 bytes, written 19:26:27.378, readable now: True
+19:26:30.575  FL STUDIO  FL64.exe pid 26236: "Save As", "eltan.flp - FL Studio 2025"
+19:26:34.785  FL STUDIO  FL64.exe pid 26236: "Confirm Save As", "Save As", "eltan.flp - FL Studio 2025"
+19:26:35.818  event  Created  eltan_new.flp~
+19:26:35.822  event  Changed  eltan_new.flp~
+19:26:35.838  event  Deleted  eltan_new.flp
+19:26:35.852  event  Created  Backup\eltan_new (overwritten at 19h26).flp  [ignored]
+19:26:35.866  event  Changed  Backup  [ignored]
+19:26:35.878  event  Changed  Backup\eltan_new (overwritten at 19h26).flp  [ignored]
+19:26:35.893  event  Renamed  eltan_new.flp  (was eltan_new.flp~)
+19:26:36.967  FL STUDIO  FL64.exe pid 26236: "eltan_new.flp - FL Studio 2025"
+19:26:38.016  QUIET for 2 s after changes to 2 path(s)
+19:26:38.020    SAVE DETECTED  eltan_new.flp  189098 bytes, written 19:26:35.706, readable now: True
+19:26:55.759  FL STUDIO  FL64.exe pid 26236: "cz.flp - FL Studio 2025"
+19:27:01.611  --- stopped ---
+19:29:22.805  --- watchspike started ---
+19:29:22.816  watching:   C:\Users\achic\Documents\Image-Line\FL Studio\Projects\eltan
+19:29:22.832  log file:   C:\Users\achic\Desktop\henosis\henosis-milestone1\henosis\spike\watchspike-log.txt
+19:29:22.849  powershell: 5.1.26100.9818, window API: True
+19:29:22.862  Press Ctrl+C to stop.
+19:29:22.897  FL STUDIO  not running
+19:29:25.006  FL STUDIO  FL64.exe pid 12988: (no window caption)
+19:29:29.200  FL STUDIO  FL64.exe pid 12988: "FL Studio 21"
+19:29:39.703  FL STUDIO  FL64.exe pid 7512: (no window caption)
+19:29:43.949  FL STUDIO  FL64.exe pid 7512: "FL Studio 2025"
+19:29:52.377  FL STUDIO  FL64.exe pid 7512: "eltan.flp - FL Studio 2025"
+19:30:29.930  FL STUDIO  FL64.exe pid 7512: "Settings - Project credits", "eltan.flp - FL Studio 2025"
+19:30:32.015  FL STUDIO  FL64.exe pid 7512: "Settings - Project credits", "EL - FL Studio 2025"
+19:30:34.119  FL STUDIO  FL64.exe pid 7512: "Settings - Project credits", "ELTAN TEST - FL Studio 2025"
+19:30:38.343  FL STUDIO  FL64.exe pid 7512: "ELTAN TEST - FL Studio 2025"
+19:30:48.879  event  Created  eltan.flp~
+19:30:48.886  event  Changed  eltan.flp~
+19:30:48.897  event  Deleted  eltan.flp
+19:30:48.910  event  Created  Backup\eltan (overwritten at 19h30).flp  [ignored]
+19:30:48.923  event  Changed  Backup\eltan (overwritten at 19h30).flp  [ignored]
+19:30:48.937  event  Changed  Backup  [ignored]
+19:30:48.954  event  Renamed  eltan.flp  (was eltan.flp~)
+19:30:51.037  QUIET for 2 s after changes to 2 path(s)
+19:30:51.057    SAVE DETECTED  eltan.flp  189118 bytes, written 19:30:48.630, readable now: True
+19:30:51.061  FL STUDIO  not running
+19:53:51.710  --- stopped ---
