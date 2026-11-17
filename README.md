@@ -7,7 +7,19 @@ a history you can comment on.
 
 Windows only for now. Version 0.4.0.
 
-## What is in this folder
+## Where to get it
+
+Every version is on the repository's [Releases
+page](https://github.com/onmore1/henosis/releases): download **Henosis.exe**
+and double-click it, or take the zip if you also want the command-line tools,
+the Linux server and the source.
+
+To publish a new one: open the **Actions** tab, pick **Release**, press **Run
+workflow** and type the version (for example `0.4.1`). GitHub runs the tests,
+builds the Windows programs, makes the tag and puts the release up. Its notes
+come from that version's section in `CHANGELOG.md`.
+
+## What is in a release
 
 ```
 Henosis.exe             the app. Double-click it. Everything is in here
