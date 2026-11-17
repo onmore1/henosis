@@ -1,0 +1,20 @@
+# Build output
+build/
+build-*/
+out/
+*.exe
+*.obj
+*.pdb
+
+# Spike output
+spike/watchspike-log.txt
+
+# Editors
+.vs/
+.vscode/
+*.user
+
+# Built programs and packages (they live in the GitHub releases instead)
+dist/
+*.zip
+app/uitest/last-run*.png
