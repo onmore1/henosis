@@ -1,0 +1,56 @@
+# Builds the Windows app and publishes it as a release whenever a version tag
+# is pushed:  git tag v0.4.1 && git push origin v0.4.1
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - name: Run the tests
+        working-directory: app
+        run: go test ./...
+
+      - name: Build the programs
+        working-directory: app
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p ../dist/tools
+          GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -H=windowsgui" -o ../dist/Henosis.exe ./cmd/henosis-agent
+          GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o ../dist/tools/henosis-cli.exe ./cmd/henosis
+          GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o ../dist/tools/henosis-server.exe ./cmd/henosis-server
+          GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o ../dist/tools/henosis-server-linux ./cmd/henosis-server
+
+      - name: Make the zip
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p package/Henosis
+          cp dist/Henosis.exe README.md package/Henosis/
+          cp -r dist/tools package/Henosis/
+          (cd app && zip -qr ../package/Henosis/henosis-source.zip . -x "uitest/last-run*")
+          (cd package && zip -qr "../henosis-$version.zip" Henosis)
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          notes=$(git tag -l --format='%(contents)' "$GITHUB_REF_NAME")
+          [ -n "$notes" ] || notes="Download Henosis.exe and double-click it."
+          gh release create "$GITHUB_REF_NAME" \
+            dist/Henosis.exe "henosis-$version.zip" \
+            --title "Hénōsis $version" --notes "$notes"
