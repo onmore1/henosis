@@ -5,7 +5,7 @@ your friend's folder updates by itself. One person edits at a time; if two
 people do change the same file, both versions are kept, and every version has
 a history you can comment on.
 
-Windows only for now. Version 0.4.0.
+Windows only for now. Version 0.5.0.
 
 ## Where to get it
 
@@ -39,8 +39,10 @@ henosis-source.zip      source of everything (Go, no dependencies)
    allow Henosis on your network, say yes.
 3. Press **Copy code** and send the code to your friend however you like
    (Telegram, Discord, anything).
-4. Under "Add a project", click one of the projects it found in your FL Studio
-   projects folder, or paste the folder that holds your `.flp` and press Add.
+4. Add a project: press **Add a project** and pick the folder that holds the
+   `.flp`, or just drag that folder onto the window from File Explorer. The
+   projects already in your FL Studio projects folder are offered as chips,
+   one click each.
 
 **Your friend:**
 

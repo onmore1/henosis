@@ -19,6 +19,9 @@ var page []byte
 // Handler serves the status page and its API. It is meant for 127.0.0.1
 // only: requests that name another host, come from another site, or lack the
 // page's own header are refused, so no web page can drive the app.
+// agentDroppedFile is DroppedFile as the window sends it.
+type agentDroppedFile = DroppedFile
+
 func (a *Agent) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
@@ -55,18 +58,19 @@ func (a *Agent) Handler() http.Handler {
 	})
 
 	type body struct {
-		Server     string `json:"server"`
-		Token      string `json:"token"`
-		Name       string `json:"name"`
-		Folder     string `json:"folder"`
-		Code       string `json:"code"`
-		ProjectID  string `json:"project_id"`
-		SnapshotID string `json:"snapshot_id"`
-		Days       int    `json:"days"`
-		Port       int    `json:"port"`
-		On         bool   `json:"on"`
-		Text       string `json:"text"`
-		File       string `json:"file"`
+		Server     string             `json:"server"`
+		Token      string             `json:"token"`
+		Name       string             `json:"name"`
+		Folder     string             `json:"folder"`
+		Code       string             `json:"code"`
+		ProjectID  string             `json:"project_id"`
+		SnapshotID string             `json:"snapshot_id"`
+		Days       int                `json:"days"`
+		Port       int                `json:"port"`
+		On         bool               `json:"on"`
+		Text       string             `json:"text"`
+		File       string             `json:"file"`
+		Files      []agentDroppedFile `json:"files"`
 	}
 	post := func(pattern string, h func(r *http.Request, in body) (any, error)) {
 		mux.HandleFunc("POST "+pattern, func(w http.ResponseWriter, r *http.Request) {
@@ -123,6 +127,13 @@ func (a *Agent) Handler() http.Handler {
 		return map[string]string{"token": token}, err
 	})
 	post("/api/autostart", func(r *http.Request, in body) (any, error) { return nil, a.SetAutostart(in.On) })
+	post("/api/drop", func(r *http.Request, in body) (any, error) {
+		files := make([]DroppedFile, 0, len(in.Files))
+		for _, f := range in.Files {
+			files = append(files, DroppedFile(f))
+		}
+		return a.AddDropped(strings.TrimSpace(in.Name), files)
+	})
 	post("/api/create", func(r *http.Request, in body) (any, error) {
 		if in.File != "" {
 			return a.CreateFromFile(in.File)

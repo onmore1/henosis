@@ -24,7 +24,7 @@ import (
 )
 
 // Version is the release this binary was built from.
-var Version = "0.4.0"
+var Version = "0.5.0"
 
 const usage = `henosis-server ` + "%s" + `
 

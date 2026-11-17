@@ -2,6 +2,20 @@
 
 The release workflow takes the notes for a version from the section below.
 
+## 0.5.0
+
+Download **Henosis.exe** and double-click it.
+
+- **One way to add a project.** Press **Add a project** and pick the folder
+  that holds the `.flp`, or drag that folder onto the window from File
+  Explorer. A browser never tells a page where a folder is on disk, so the app
+  looks for it under your Documents, Desktop, Downloads and the rest of your
+  home folder, matching the folder's name against the files inside it. It is
+  linked where it really lives, never copied — except a lone `.flp` sitting in
+  your FL Studio projects folder, which gets a folder of its own.
+- A folder it cannot find, or something that is not a project, says so instead
+  of guessing. The path box is still there under "Paste a path instead".
+
 ## 0.4.0
 
 Download **Henosis.exe** and double-click it. That is the whole app: the sync,

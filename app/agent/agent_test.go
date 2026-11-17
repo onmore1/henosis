@@ -45,6 +45,7 @@ func newDeskWithHome(t *testing.T, home string) *desk {
 	a := agent.New(cfg, &fl.Fake{})
 	a.BaseFolder = filepath.Join(home, "Documents", "Henosis")
 	a.ProjectRoots = []string{filepath.Join(home, "Documents", "Image-Line", "FL Studio", "Projects")}
+	a.SearchRoots = []string{home}
 	a.LocalIPs = func() []string { return []string{"127.0.0.1"} }
 	a.AutoLinkEvery = 50 * time.Millisecond
 	a.TickEvery = 20 * time.Millisecond

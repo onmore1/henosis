@@ -73,6 +73,11 @@ details{margin-top:14px;color:var(--dim);font-size:13.5px}summary{cursor:pointer
 #versions{max-height:46vh;overflow-y:auto;margin-top:8px}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
 .help{color:var(--dim);font-size:13.5px;margin:-4px 0 12px}
+#drop{border:2px dashed var(--line);border-radius:12px;padding:22px;text-align:center;transition:border-color .15s,background .15s}
+#drop.over{border-color:var(--accent);background:#221c14}
+#drop .big{margin:0 0 10px}
+body.dragging #drop{border-color:var(--accent)}
+details.paste{margin-top:10px}
 .step{display:flex;gap:10px;align-items:flex-start;margin:10px 0;color:var(--dim);font-size:13.5px}
 .step b{display:flex;align-items:center;justify-content:center;flex:none;width:20px;height:20px;border-radius:50%;background:#2a2d39;color:var(--text);font-size:12px}
 .danger{color:#ef6461;border-color:#5a2b2b}
@@ -150,7 +155,7 @@ function render() {
   put("projects", cards());
   put("projectsHint", state.projects.length > 1 ? "click one to see its history" : "");
   put("unlinked", state.unlinked.length ? `<h2>In the session, not on this computer<span class="hint">your friend added these, or you stopped syncing them</span></h2>` + state.unlinked.map((p) => `<div class="card"><div class="top"><div class="name">${esc(p.name)}</div><div class="headline"><button data-link="${p.id}">Download it</button></div></div></div>`).join("") : "");
-  put("suggest", suggestions.length ? `<label>Found in your FL Studio projects folder. Click one to add it:</label><div class="chips">${suggestions.map((s, i) => `<button data-suggest="${i}" title="${esc(s.file)}">${esc(s.name)}${s.loose ? " (single file)" : ""}</button>`).join("")}</div>` : "");
+  put("suggest", suggestions.length ? `<label>Or one of these, found in your FL Studio projects folder:</label><div class="chips">${suggestions.map((s, i) => `<button data-suggest="${i}" title="${esc(s.file)}">${esc(s.name)}${s.loose ? " (single file)" : ""}</button>`).join("")}</div>` : "");
   put("foot", `${state.autostart ? `<button class="quiet" id="autostart">${state.autostart === "on" ? "Do not start with Windows" : "Start with Windows"}</button>` : ""}<button class="quiet" id="logout">Leave the session</button><button class="quiet" id="quit">Quit Hénōsis</button><small style="margin-left:auto;align-self:center">version ${esc(state.version)}</small>`);
   renderHistory();
 }
@@ -191,10 +196,13 @@ function signedIn(hosting) {
     ${session}
     <h2>Projects<span class="hint" id="projectsHint"></span></h2><div id="projects"></div><div id="unlinked"></div>
     <h2>Add a project</h2><div class="card">
-      <div class="help">A project is the folder that holds the <b>.flp</b> file. Everything in it is shared, except FL Studio's own Backup folder.</div>
+      <div id="drop">
+        <div class="row" style="margin:0 0 10px;justify-content:center"><button class="main big" id="addProject" style="width:auto">Add a project</button></div>
+        <div class="help" style="margin:0">Pick the folder that holds the <b>.flp</b>, or drag it onto this window from File Explorer.</div>
+      </div>
       <div id="suggest"></div>
-      <label>Or paste the folder yourself</label>
-      <div class="inline"><input id="newFolder" placeholder="C:\\Users\\you\\Documents\\Image-Line\\FL Studio\\Projects\\My Song" autocomplete="off"><button class="main" id="create">Add</button></div></div>
+      <details class="paste"><summary>Paste a path instead</summary>
+        <div class="inline" style="margin-top:8px"><input id="newFolder" placeholder="C:\\Users\\you\\Documents\\Image-Line\\FL Studio\\Projects\\My Song" autocomplete="off"><button id="create">Add</button></div></details></div>
     <div class="row" style="margin:24px 0 0" id="foot"></div>
   </div>
   <div class="side"><div class="card"><div class="name" id="histTitle">History</div>
@@ -299,6 +307,7 @@ document.addEventListener("click", (e) => {
   else if (t.id === "saveExtra") act("/api/host/extra", {text: val("extraAddr")}, () => toast("The code now includes that address. Send the new code."));
   else if (t.id === "newCode") { if (confirm("Make a new code? The old code stops working for new friends. Everyone already connected stays connected.")) act("/api/host/new-code"); }
   else if (t.id === "hostStop") { if (confirm("Stop the session? Friends cannot sync until you start it again. The projects stay on this computer.")) act("/api/host/stop"); }
+  else if (t.id === "addProject") pickFolder();
   else if (t.id === "create") act("/api/create", {folder: val("newFolder")}, () => { clear("newFolder"); toast("Project added"); });
   else if (t.id === "setNote") act(`/api/projects/${selected}/note`, {text: val("noteInput")}, () => clear("noteInput"));
   else if (t.id === "sendComment") { if (commentOn) act(`/api/projects/${selected}/comment`, {snapshot_id: commentOn, text: val("commentInput")}, () => clear("commentInput")); }
@@ -355,6 +364,74 @@ function saveConsole() {
     document.addEventListener("mouseup", stop);
   });
 })();
+
+// A browser never tells a page where a folder is on disk, so the window sends
+// the folder's name and what is inside it, and the app finds it.
+async function addFolder(name, files) {
+  if (busy) return;
+  const label = name || (files[0] && files[0].name) || "that";
+  toast(`Looking for ${label} on this computer…`);
+  await act("/api/drop", {name, files}, (link) => toast(`${link.name} added from ${link.folder}`));
+}
+async function pickFolder() {
+  if (!window.showDirectoryPicker) {
+    toast("This window cannot open a folder picker. Drag the folder in, or paste its path below.", true);
+    return;
+  }
+  let dir;
+  try { dir = await window.showDirectoryPicker({mode: "read", id: "henosis-project"}); }
+  catch (e) { return; } // the user closed the picker
+  const files = [];
+  try {
+    for await (const [name, handle] of dir.entries()) {
+      if (handle.kind !== "file" || files.length >= 50) continue;
+      const file = await handle.getFile();
+      files.push({name, size: file.size});
+    }
+  } catch (e) {}
+  await addFolder(dir.name, files);
+}
+// What a drag carries: a folder (its top-level files), or a single file.
+async function readDrop(transfer) {
+  const items = [...(transfer.items || [])].filter((i) => i.kind === "file");
+  const entry = items.length && items[0].webkitGetAsEntry ? items[0].webkitGetAsEntry() : null;
+  if (entry && entry.isDirectory) {
+    const files = await new Promise((done) => {
+      entry.createReader().readEntries((entries) => {
+        const out = [], wanted = entries.filter((e) => e.isFile).slice(0, 50);
+        if (!wanted.length) return done(out);
+        let left = wanted.length;
+        wanted.forEach((e) => e.file((f) => { out.push({name: e.name, size: f.size}); if (!--left) done(out); }, () => { if (!--left) done(out); }));
+      }, () => done([]));
+    });
+    return {name: entry.name, files};
+  }
+  const file = transfer.files && transfer.files[0];
+  if (file) return {name: "", files: [{name: file.name, size: file.size}]};
+  return null;
+}
+["dragenter", "dragover"].forEach((type) => document.addEventListener(type, (e) => {
+  if (!state || !state.signed_in || !e.dataTransfer || ![...e.dataTransfer.types].includes("Files")) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "copy";
+  document.body.classList.add("dragging");
+  const zone = document.getElementById("drop");
+  if (zone) zone.classList.toggle("over", !!e.target.closest && !!e.target.closest("#drop"));
+}));
+document.addEventListener("dragleave", (e) => { if (!e.relatedTarget) stopDragging(); });
+function stopDragging() {
+  document.body.classList.remove("dragging");
+  const zone = document.getElementById("drop");
+  if (zone) zone.classList.remove("over");
+}
+document.addEventListener("drop", async (e) => {
+  if (!state || !state.signed_in || !e.dataTransfer) return;
+  e.preventDefault();
+  stopDragging();
+  const dropped = await readDrop(e.dataTransfer);
+  if (!dropped) { toast("Drag the project's folder, or its .flp file", true); return; }
+  await addFolder(dropped.name, dropped.files);
+});
 
 function drawLog() {
   const box = $("#lines"), detail = $("#detail").checked, atEnd = box.scrollTop + box.clientHeight >= box.scrollHeight - 30;

@@ -93,20 +93,35 @@ try:
         time.sleep(4.5)
         check("the code stays the same across refreshes", ann.inner_text("#sessionCode") == code)
 
-        # --- adding a project: the folder is enough ------------------------
-        slow_type(ann, "#newFolder", song, "ann ")
-        ann.keyboard.press("Enter")
+        # --- adding a project: drag it onto the window ----------------------
+        ann.evaluate("""([name, size]) => {
+          const data = new DataTransfer();
+          data.items.add(new File([new Uint8Array(size)], name));
+          document.dispatchEvent(new DragEvent("drop", {dataTransfer: data, bubbles: true, cancelable: true}));
+        }""", ["Night Drive.flp", os.path.getsize(os.path.join(song, "Night Drive.flp"))])
         wait("the project to sync", lambda: "Up to date" in ann.inner_text("#projects"))
-        check("the project is named after its folder", "Night Drive" in ann.inner_text("#projects"))
-        check("the add field is emptied", ann.input_value("#newFolder") == "")
-        check("the example folder shows its backslashes", "C:\\Users\\you\\Documents" in ann.get_attribute("#newFolder", "placeholder"))
+        check("the dragged project was found on disk and added", "Night Drive" in ann.inner_text("#projects"))
+        check("it was linked where it actually lives", song in ann.inner_text("#projects"))
 
-        # A wrong press shows an error and keeps what was typed.
+        # Dragging something that is not a project says so and adds nothing.
+        before = ann.inner_text("#projects")
+        ann.evaluate("""() => {
+          const data = new DataTransfer();
+          data.items.add(new File(["x"], "holiday.jpg"));
+          document.dispatchEvent(new DragEvent("drop", {dataTransfer: data, bubbles: true, cancelable: true}));
+        }""")
+        wait("the refusal in the console", lambda: "drop failed" in ann.inner_text("#lines"))
+        check("nothing was added for a random file", ann.inner_text("#projects") == before)
+
+        # The path box still works for anyone who prefers typing.
+        ann.click("details.paste summary")
         slow_type(ann, "#newFolder", os.path.join(root, "does not exist"), "ann ")
         ann.click("#create")
         wait("the error line in the console", lambda: "create failed" in ann.inner_text("#lines"))
         check("a failed press keeps the typed folder", ann.input_value("#newFolder") != "")
+        check("the example folder shows its backslashes", "C:\\Users\\you\\Documents" in ann.get_attribute("#newFolder", "placeholder"))
         ann.fill("#newFolder", "")
+        check("the add button is there for the folder picker", ann.locator("#addProject").count() == 1)
 
         # --- the friend joins with the code --------------------------------
         slow_type(bob, "#myName", "max", "bob ")
