@@ -44,7 +44,7 @@ henosis-source.zip      source of everything (Go, no dependencies)
    projects already in your FL Studio projects folder are offered as chips,
    one click each.
 
-**Your friend:**
+**Your friend:** 
 
 1. Double-click `Henosis.exe`.
 2. Type their name, paste the code, press **Join**.

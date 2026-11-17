@@ -1,7 +1,7 @@
 // Package cli is the henosis command line. The same code is the background
 // app: "henosis run" starts it.
 package cli
-
+//govno pazl
 import (
 	"bytes"
 	"context"
