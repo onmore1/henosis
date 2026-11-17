@@ -1,11 +1,18 @@
-# Builds the Windows app and publishes it as a release whenever a version tag
-# is pushed:  git tag v0.4.1 && git push origin v0.4.1
+# Builds the Windows app, tests it and publishes it as a release.
+#
+# Either push a version tag (git tag v0.4.1 && git push origin v0.4.1), or open
+# the Actions tab, pick "Release", press "Run workflow" and type the version:
+# the tag is then made here.
 name: Release
 
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, for example 0.4.1"
+        required: true
 
 permissions:
   contents: write
@@ -15,6 +22,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Work out the version
+        id: v
+        run: |
+          version="${{ inputs.version }}"
+          [ -n "$version" ] || version="${GITHUB_REF_NAME#v}"
+          version="${version#v}"
+          case "$version" in
+            [0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "::error::\"$version\" is not a version like 0.4.1"; exit 1 ;;
+          esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-go@v5
         with:
@@ -36,8 +58,9 @@ jobs:
           GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o ../dist/tools/henosis-server-linux ./cmd/henosis-server
 
       - name: Make the zip
+        env:
+          version: ${{ steps.v.outputs.version }}
         run: |
-          version="${GITHUB_REF_NAME#v}"
           mkdir -p package/Henosis
           cp dist/Henosis.exe README.md package/Henosis/
           cp -r dist/tools package/Henosis/
@@ -47,10 +70,20 @@ jobs:
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
+          version: ${{ steps.v.outputs.version }}
+          tag: ${{ steps.v.outputs.tag }}
         run: |
-          version="${GITHUB_REF_NAME#v}"
-          notes=$(git tag -l --format='%(contents)' "$GITHUB_REF_NAME")
-          [ -n "$notes" ] || notes="Download Henosis.exe and double-click it."
-          gh release create "$GITHUB_REF_NAME" \
+          # The notes are this version's section of CHANGELOG.md, if it has one.
+          awk -v v="## $version" '$0 == v {on = 1; next} /^## / {on = 0} on' CHANGELOG.md > notes.md
+          if [ -s notes.md ]; then
+            notes_arg="--notes-file notes.md"
+          else
+            notes_arg="--generate-notes"
+          fi
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "::error::$tag has already been released"
+            exit 1
+          fi
+          gh release create "$tag" --target "$GITHUB_SHA" \
             dist/Henosis.exe "henosis-$version.zip" \
-            --title "Hénōsis $version" --notes "$notes"
+            --title "Hénōsis $version" $notes_arg
