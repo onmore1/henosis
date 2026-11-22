@@ -18,11 +18,36 @@ import (
 	"sync"
 )
 
-// NewServer starts the stand-in relay. Its URL is what Henosis takes as the
-// relay URL. Close it when the test ends.
-func NewServer() *httptest.Server {
+// Server is the stand-in relay. Its URL is what Henosis takes as the relay
+// URL. Close it when the test ends.
+type Server struct {
+	*httptest.Server
+	r *relay
+}
+
+// NewServer starts the stand-in relay.
+func NewServer() *Server {
 	f := &relay{waiting: map[string]map[string][]*sock{}}
-	return httptest.NewServer(http.HandlerFunc(f.serve))
+	return &Server{Server: httptest.NewServer(http.HandlerFunc(f.serve)), r: f}
+}
+
+// Forget makes the relay lose every waiting socket without closing it, the
+// way a redeployed or crashed relay can strand them.
+func (s *Server) Forget() {
+	s.r.mu.Lock()
+	s.r.waiting = map[string]map[string][]*sock{}
+	s.r.mu.Unlock()
+}
+
+// Waiting counts the sockets waiting on a side ("accept" or "dial").
+func (s *Server) Waiting(side string) int {
+	s.r.mu.Lock()
+	defer s.r.mu.Unlock()
+	n := 0
+	for _, sides := range s.r.waiting {
+		n += len(sides[side])
+	}
+	return n
 }
 
 type relay struct {

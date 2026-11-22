@@ -2,13 +2,22 @@ package relay
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	mrand "math/rand"
 	"io"
 	"log"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 )
+
+// renewEvery is how long a waiting accept socket lives before it is replaced
+// by a fresh one. A variable so tests can make it short.
+var renewEvery atomic.Int64
+
+func init() { renewEvery.Store(int64(2 * time.Minute)) }
 
 // HostAcceptor keeps a small pool of WebSockets open to the relay, each
 // waiting to be paired with an incoming friend dial. When a pair happens,
@@ -72,10 +81,14 @@ func (h *HostAcceptor) acceptOnce(ctx context.Context, paired func()) error {
 		return fmt.Errorf("accept dial: %w", err)
 	}
 	t := newTunnelConn(ws)
-	// Wait up to 10 minutes to be paired. The worker closes unpaired
-	// sockets at 10 minutes anyway. If ctx cancels first, close the socket.
+	// A waiting socket is renewed every couple of minutes (with some jitter
+	// so the pool's sockets do not all renew at once). A socket the relay
+	// dropped, say because it was redeployed, is noticed within that time
+	// at the latest, and usually at once.
+	every := time.Duration(renewEvery.Load())
+	wait := every + time.Duration(mrand.Int63n(int64(every/4)+1))
 	result := make(chan error, 1)
-	go func() { result <- t.waitPaired(10 * time.Minute) }()
+	go func() { result <- t.waitPaired(wait) }()
 	select {
 	case <-ctx.Done():
 		t.Close()
@@ -83,7 +96,11 @@ func (h *HostAcceptor) acceptOnce(ctx context.Context, paired func()) error {
 	case err := <-result:
 		if err != nil {
 			t.Close()
-			return nil // nothing paired; normal
+			var ne net.Error
+			if !errors.As(err, &ne) || !ne.Timeout() {
+				h.logf("relay: the relay dropped a waiting connection (%v); opening a new one", err)
+			}
+			return nil
 		}
 	}
 	paired()

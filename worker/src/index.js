@@ -1,98 +1,111 @@
 // Hénōsis relay — a Cloudflare Worker + Durable Object that pairs two
-// WebSockets by session code, then pipes bytes between them. Nothing is
-// stored, nothing is logged, nothing is kept once both sides disconnect.
+// WebSockets by session code, then passes messages between them. Nothing is
+// stored and nothing is logged; a pairing lives only as long as its sockets.
 //
-// The host opens one or more "accept" sockets per session code and waits.
-// The friend opens a "dial" socket; the Durable Object pairs it with an
-// idle accept, and from that moment the two sockets act as one TCP tunnel.
+// The host app keeps "accept" sockets open per session code. A friend's app
+// opens a "dial" socket; the Durable Object pairs it with a free accept
+// socket, says "OK" to both, and from then on every message from one side
+// goes to the other.
+//
+// It uses the WebSocket Hibernation API: idle sockets cost nothing, and each
+// socket carries its own pairing (as an attachment), so the object can sleep
+// between messages without forgetting who talks to whom.
 //
 // Routes:
-//   GET /accept?code=XXXXXX   (WebSocket) — host side, waits for a dial
-//   GET /dial?code=XXXXXX     (WebSocket) — friend side, waits for an accept
+//   GET /                     — a line of text with the version
+//   GET /accept?code=<hex32>  (WebSocket) — host side
+//   GET /dial?code=<hex32>    (WebSocket) — friend side
+
+export const VERSION = "2";
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    const code = url.searchParams.get("code") || "";
-    if (!/^[a-f0-9]{32}$/i.test(code)) {
-      return new Response("bad code", { status: 400 });
-    }
     if (url.pathname !== "/accept" && url.pathname !== "/dial") {
-      return new Response("Hénōsis relay. See https://github.com/onmore1/henosis", { status: 200 });
+      return new Response(`Hénōsis relay ${VERSION}\n`, { status: 200, headers: { "content-type": "text/plain; charset=utf-8" } });
+    }
+    const code = (url.searchParams.get("code") || "").toLowerCase();
+    if (!/^[a-f0-9]{32}$/.test(code)) {
+      return new Response("bad code", { status: 400 });
     }
     if (request.headers.get("Upgrade") !== "websocket") {
       return new Response("websocket required", { status: 426 });
     }
-    const id = env.RENDEZVOUS.idFromName(code.toLowerCase());
-    const stub = env.RENDEZVOUS.get(id);
+    const stub = env.RENDEZVOUS.get(env.RENDEZVOUS.idFromName(code));
     return stub.fetch(request);
   },
 };
 
-// Rendezvous — one Durable Object per session code. Holds queues of
-// waiting sockets and pairs them up.
+// Rendezvous — one Durable Object per session code.
 export class Rendezvous {
-  constructor(state, env) {
-    this.state = state;
-    // Queues of unpaired sockets. Each entry: { ws, side: "accept" | "dial" }.
-    this.accepts = [];
-    this.dials = [];
+  constructor(ctx, env) {
+    this.ctx = ctx;
   }
 
   async fetch(request) {
-    const url = new URL(request.url);
-    const side = url.pathname === "/accept" ? "accept" : "dial";
+    const side = new URL(request.url).pathname === "/accept" ? "accept" : "dial";
+    const other = side === "accept" ? "dial" : "accept";
+    const id = crypto.randomUUID();
 
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
-    server.accept();
+    this.ctx.acceptWebSocket(server, [side, "id:" + id]);
 
-    // Pair immediately if the other side is already waiting. Sockets that
-    // went away while waiting are skipped.
-    const queue = side === "accept" ? this.dials : this.accepts;
-    let other = queue.shift();
-    while (other && other.ws.readyState !== 1 /* OPEN */) other = queue.shift();
-    if (other) {
+    // The first open socket of the other side that is not paired yet.
+    const peer = this.ctx.getWebSockets(other).find((ws) => {
+      const a = ws.deserializeAttachment();
+      return a && !a.peer && ws.readyState === 1;
+    });
+    if (peer) {
+      const peerID = peer.deserializeAttachment().id;
+      server.serializeAttachment({ id, peer: peerID });
+      peer.serializeAttachment({ id: peerID, peer: id });
       try {
-        this.pipe(server, other.ws);
+        peer.send("OK");
+        server.send("OK");
       } catch (e) {
-        try { server.close(1011, "pairing failed"); } catch (_) {}
-        try { other.ws.close(1011, "pairing failed"); } catch (_) {}
+        this.drop(server);
+        this.drop(peer);
       }
     } else {
-      this.enqueue(server, side);
+      server.serializeAttachment({ id, peer: null });
     }
-
     return new Response(null, { status: 101, webSocket: client });
   }
 
-  enqueue(ws, side) {
-    const entry = { ws, side };
-    const queue = side === "accept" ? this.accepts : this.dials;
-    queue.push(entry);
-    const cleanup = () => {
-      const i = queue.indexOf(entry);
-      if (i >= 0) queue.splice(i, 1);
-      try { ws.close(1000, "unpaired"); } catch (e) {}
-    };
-    ws.addEventListener("close", cleanup);
-    ws.addEventListener("error", cleanup);
-    // Cap the wait so an orphaned socket doesn't sit forever.
-    setTimeout(() => { if (queue.indexOf(entry) >= 0) cleanup(); }, 10 * 60 * 1000);
+  peerOf(ws) {
+    const a = ws.deserializeAttachment();
+    if (!a || !a.peer) return null;
+    return this.ctx.getWebSockets("id:" + a.peer)[0] || null;
   }
 
-  pipe(a, b) {
-    const closeBoth = () => {
-      try { a.close(1000, "peer-gone"); } catch (e) {}
-      try { b.close(1000, "peer-gone"); } catch (e) {}
-    };
-    a.addEventListener("message", (e) => { try { b.send(e.data); } catch (_) { closeBoth(); } });
-    b.addEventListener("message", (e) => { try { a.send(e.data); } catch (_) { closeBoth(); } });
-    a.addEventListener("close", closeBoth);
-    b.addEventListener("close", closeBoth);
-    a.addEventListener("error", closeBoth);
-    b.addEventListener("error", closeBoth);
-    // Let each side know the tunnel is open.
-    try { a.send("OK"); b.send("OK"); } catch (e) { closeBoth(); }
+  async webSocketMessage(ws, message) {
+    const a = ws.deserializeAttachment();
+    if (!a || !a.peer) return; // not paired yet: nothing to pass on
+    const peer = this.peerOf(ws);
+    if (!peer) {
+      this.drop(ws);
+      return;
+    }
+    try {
+      peer.send(message);
+    } catch (e) {
+      this.drop(ws);
+      this.drop(peer);
+    }
+  }
+
+  async webSocketClose(ws) {
+    const peer = this.peerOf(ws);
+    this.drop(ws);
+    if (peer) this.drop(peer);
+  }
+
+  async webSocketError(ws) {
+    await this.webSocketClose(ws);
+  }
+
+  drop(ws) {
+    try { ws.close(1000, "closed"); } catch (e) {}
   }
 }

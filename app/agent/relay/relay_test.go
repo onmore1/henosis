@@ -16,7 +16,7 @@ import (
 	"henosis/agent/relay/relaytest"
 )
 
-func newFakeRelay() *httptest.Server { return relaytest.NewServer() }
+func newFakeRelay() *relaytest.Server { return relaytest.NewServer() }
 
 const testCode = "00112233445566778899aabbccddeeff"
 
@@ -165,5 +165,36 @@ func TestRelayNoHost(t *testing.T) {
 	}
 	if time.Since(start) > 4*time.Second {
 		t.Fatal("dial took too long to give up")
+	}
+}
+
+// A relay that forgets the host's waiting sockets (as happened when it was
+// redeployed) must not leave the host unreachable for long.
+func TestHostRecoversFromAForgetfulRelay(t *testing.T) {
+	old := renewEvery.Load()
+	renewEvery.Store(int64(200 * time.Millisecond))
+	defer renewEvery.Store(old)
+
+	relaySrv := newFakeRelay()
+	defer relaySrv.Close()
+	startHost(t, relaySrv.URL, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("hi"))
+	}))
+	deadline := time.Now().Add(3 * time.Second)
+	for relaySrv.Waiting("accept") < 2 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	relaySrv.Forget()
+	if relaySrv.Waiting("accept") != 0 {
+		t.Fatal("forget did not forget")
+	}
+	start := time.Now()
+	resp, err := NewHTTPClient(relaySrv.URL, testCode).Get("http://relay/")
+	if err != nil {
+		t.Fatalf("after the relay forgot the host: %v", err)
+	}
+	resp.Body.Close()
+	if took := time.Since(start); took > 2*time.Second {
+		t.Fatalf("reaching the host took %v", took)
 	}
 }
