@@ -50,9 +50,12 @@ jobs:
         working-directory: app
         env:
           CGO_ENABLED: "0"
+          # The relay built into the app (Settings > Secrets and variables >
+          # Actions > Variables > HENOSIS_RELAY). Empty builds have no relay.
+          RELAY: ${{ vars.HENOSIS_RELAY }}
         run: |
           mkdir -p ../dist/tools
-          GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -H=windowsgui" -o ../dist/Henosis.exe ./cmd/henosis-agent
+          GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -H=windowsgui -X henosis/config.DefaultRelay=$RELAY" -o ../dist/Henosis.exe ./cmd/henosis-agent
           GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o ../dist/tools/henosis-cli.exe ./cmd/henosis
           GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o ../dist/tools/henosis-server.exe ./cmd/henosis-server
           GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o ../dist/tools/henosis-server-linux ./cmd/henosis-server

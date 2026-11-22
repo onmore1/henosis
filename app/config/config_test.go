@@ -99,3 +99,25 @@ func TestCleanFolderAndDevice(t *testing.T) {
 		t.Errorf("device names: %q %q", a, b)
 	}
 }
+
+func TestRelayURLPrecedence(t *testing.T) {
+	old := DefaultRelay
+	defer func() { DefaultRelay = old }()
+	t.Setenv("HENOSIS_RELAY", "")
+	c := &Config{}
+	if c.RelayURL() != "" {
+		t.Fatal("no relay anywhere should mean off")
+	}
+	DefaultRelay = "https://built-in.example"
+	if c.RelayURL() != "https://built-in.example" {
+		t.Fatalf("built-in relay: %q", c.RelayURL())
+	}
+	c.Relay = " https://typed.example "
+	if c.RelayURL() != "https://typed.example" {
+		t.Fatalf("typed relay wins over built-in: %q", c.RelayURL())
+	}
+	t.Setenv("HENOSIS_RELAY", "https://env.example")
+	if c.RelayURL() != "https://env.example" {
+		t.Fatalf("env wins: %q", c.RelayURL())
+	}
+}

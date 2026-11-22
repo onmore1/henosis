@@ -19,9 +19,20 @@ wrangler deploy
 ```
 
 The command prints the relay URL, something like
-`https://henosis-relay.<your-account>.workers.dev`. Put that URL into
-the Hénōsis agent as `RelayURL` in config, or set the `HENOSIS_RELAY`
-environment variable when starting the agent.
+`https://henosis-relay.<your-account>.workers.dev`.
+
+To build it into the app, so friends set nothing:
+
+- Releases: add a repository variable `HENOSIS_RELAY` with that URL
+  (Settings → Secrets and variables → Actions → Variables). The release
+  workflow passes it to the build.
+- Local builds: `go build -ldflags "-H=windowsgui -X henosis/config.DefaultRelay=<url>" ./cmd/henosis-agent`
+
+A relay typed under Advanced on the session card, or the `HENOSIS_RELAY`
+environment variable, overrides the built-in one.
+
+The Durable Object uses the SQLite backend (`new_sqlite_classes`), which
+is the only kind the Workers Free plan allows.
 
 ## Cost
 

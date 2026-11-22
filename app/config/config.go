@@ -70,8 +70,19 @@ func (c *Config) RelayURL() string {
 	if v := strings.TrimSpace(os.Getenv("HENOSIS_RELAY")); v != "" {
 		return v
 	}
-	return strings.TrimSpace(c.Relay)
+	if v := strings.TrimSpace(c.Relay); v != "" {
+		return v
+	}
+	return DefaultRelay
 }
+
+// DefaultRelay is the relay built into this copy of the app, so a friend who
+// downloads it needs to set nothing. Set at build time with
+//
+//	-ldflags "-X henosis/config.DefaultRelay=https://henosis-relay.<account>.workers.dev"
+//
+// A relay typed under Advanced, or HENOSIS_RELAY, takes precedence.
+var DefaultRelay = ""
 
 // Relay is persisted in config.json. Use RelayURL to read the effective value.
 

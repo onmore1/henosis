@@ -20,7 +20,11 @@ func Dial(ctx context.Context, relayURL, code string) (net.Conn, error) {
 		return nil, fmt.Errorf("relay: dial: %w", err)
 	}
 	t := newTunnelConn(ws)
-	if err := t.waitPaired(20 * time.Second); err != nil {
+	wait := 20 * time.Second
+	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < wait {
+		wait = time.Until(deadline)
+	}
+	if err := t.waitPaired(wait); err != nil {
 		t.Close()
 		return nil, fmt.Errorf("relay: no host listening for this code: %w", err)
 	}

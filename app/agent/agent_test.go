@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"henosis/agent"
+	"henosis/agent/relay/relaytest"
 	"henosis/config"
 	"henosis/fl"
 	"henosis/server"
@@ -632,4 +633,68 @@ func TestHostKeepsTheKnownPortAndTheHostsAccount(t *testing.T) {
 	if port := again.state().Host.Port; port != config.DefaultServerPort {
 		t.Fatalf("after a restart the session is on port %d, not %d", port, config.DefaultServerPort)
 	}
+}
+
+// TestConnectThroughTheRelay is the "no Tailscale" case: the session code's
+// addresses cannot be reached from the friend's computer, so the friend's
+// app pairs with the host through the relay, syncs, and keeps working after
+// a restart.
+func TestConnectThroughTheRelay(t *testing.T) {
+	relaySrv := relaytest.NewServer()
+	defer relaySrv.Close()
+	ann, bob := newDesk(t, "ann"), newDesk(t, "bob")
+	// The code will carry an address nobody can reach (TEST-NET-1).
+	ann.a.LocalIPs = func() []string { return []string{"192.0.2.1"} }
+
+	ann.ok("/api/host/relay", map[string]string{"text": relaySrv.URL}, nil)
+	ann.ok("/api/host/start", map[string]any{"name": "ann", "port": 0}, nil)
+	st := ann.state()
+	if st.Host.Relay != relaySrv.URL {
+		t.Fatalf("the host's relay: %q", st.Host.Relay)
+	}
+	annFolder := filepath.Join(ann.home, "Beats", "Far Away")
+	os.MkdirAll(annFolder, 0o755)
+	os.WriteFile(filepath.Join(annFolder, "Far Away.flp"), []byte("v1"), 0o644)
+	ann.ok("/api/create", map[string]string{"folder": annFolder}, nil)
+
+	// Without a relay, bob cannot get in, and is told about the relay.
+	if code, text := bob.call("POST", "/api/connect", map[string]string{"name": "bob", "code": st.Host.Code}, nil); code != 400 || !strings.Contains(text, "relay") {
+		t.Fatalf("connecting without a relay: %d %s", code, text)
+	}
+	// With the relay, the same code works.
+	bob.ok("/api/host/relay", map[string]string{"text": relaySrv.URL}, nil)
+	bob.ok("/api/connect", map[string]string{"name": "bob", "code": st.Host.Code}, nil)
+	if s := bob.state(); !s.SignedIn || s.User != "bob" || !strings.HasPrefix(s.Server, "relay://") {
+		t.Fatalf("bob after connecting through the relay: signed in %v as %q at %q", s.SignedIn, s.User, s.Server)
+	}
+	bobFile := filepath.Join(bob.home, "Documents", "Henosis", "Far Away", "Far Away.flp")
+	defer func() {
+		if t.Failed() {
+			text, _ := bob.logs(0)
+			t.Logf("bob's log:\n%s", text)
+		}
+	}()
+	eventually(t, "the project at bob's through the relay", func() bool {
+		data, _ := os.ReadFile(bobFile)
+		return string(data) == "v1"
+	})
+	// Bob's change goes back to ann the same way.
+	os.WriteFile(bobFile, []byte("v2 from bob"), 0o644)
+	eventually(t, "bob's save at ann's through the relay", func() bool {
+		data, _ := os.ReadFile(filepath.Join(annFolder, "Far Away.flp"))
+		return string(data) == "v2 from bob"
+	})
+
+	// Bob's app restarts: it dials through the relay again on its own.
+	bob.page.Close()
+	bob.a.Close()
+	bob2 := newDeskWithHome(t, bob.home)
+	if s := bob2.state(); !s.SignedIn || s.User != "bob" {
+		t.Fatalf("bob after a restart: %+v", s)
+	}
+	os.WriteFile(filepath.Join(annFolder, "Far Away.flp"), []byte("v3 from ann"), 0o644)
+	eventually(t, "ann's save at bob's after his restart", func() bool {
+		data, _ := os.ReadFile(bobFile)
+		return string(data) == "v3 from ann"
+	})
 }

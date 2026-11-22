@@ -325,6 +325,7 @@ func (a *Agent) Connect(name, code string) error {
 	var token string
 	if relayClient != nil {
 		_, token, err = client.JoinWithClient(server, secret, name, relayClient)
+		relayClient.CloseIdleConnections() // the session gets its own client
 	} else {
 		_, token, err = client.Join(server, secret, name)
 	}

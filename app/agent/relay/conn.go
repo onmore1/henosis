@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -28,11 +29,17 @@ type tunnelConn struct {
 	stop     chan struct{}
 }
 
+// pingEvery is how often an open tunnel sends a WebSocket ping. A variable
+// so tests can make it short.
+var pingEvery atomic.Int64
+
+func init() { pingEvery.Store(int64(25 * time.Second)) }
+
 // newTunnelConn wraps ws and starts a background ping loop that keeps the
 // relay's intermediate load balancers from reaping the socket.
 func newTunnelConn(ws *wsConn) *tunnelConn {
 	t := &tunnelConn{ws: ws, stop: make(chan struct{})}
-	t.pingTick = time.NewTicker(25 * time.Second)
+	t.pingTick = time.NewTicker(time.Duration(pingEvery.Load()))
 	go t.keepAlive()
 	return t
 }
@@ -43,10 +50,7 @@ func (t *tunnelConn) keepAlive() {
 		case <-t.stop:
 			return
 		case <-t.pingTick.C:
-			t.ws.writeMu.Lock()
-			err := t.ws.writeFrame(opPing, nil, true)
-			t.ws.writeMu.Unlock()
-			if err != nil {
+			if err := t.ws.writeFrame(opPing, nil, true); err != nil {
 				return
 			}
 		}
@@ -61,9 +65,7 @@ func (t *tunnelConn) Read(p []byte) (int, error) {
 		return t.readBuf.Read(p)
 	}
 	for {
-		if !t.rDeadl.IsZero() {
-			t.ws.raw.SetReadDeadline(t.rDeadl)
-		}
+		t.ws.raw.SetReadDeadline(t.rDeadl)
 		op, data, _, err := t.ws.readFrame()
 		if err != nil {
 			return 0, err
@@ -86,9 +88,7 @@ func (t *tunnelConn) Read(p []byte) (int, error) {
 			// Any other text is ignored too.
 			continue
 		case opPing:
-			t.ws.writeMu.Lock()
 			_ = t.ws.writeFrame(opPong, data, true)
-			t.ws.writeMu.Unlock()
 		case opPong:
 			// ignore
 		case opClose:
@@ -103,9 +103,7 @@ func (t *tunnelConn) Read(p []byte) (int, error) {
 func (t *tunnelConn) Write(p []byte) (int, error) {
 	t.writeMu.Lock()
 	defer t.writeMu.Unlock()
-	if !t.wDeadl.IsZero() {
-		t.ws.raw.SetWriteDeadline(t.wDeadl)
-	}
+	t.ws.raw.SetWriteDeadline(t.wDeadl)
 	if err := t.ws.writeFrame(opBinary, p, true); err != nil {
 		return 0, err
 	}
@@ -130,9 +128,7 @@ func (t *tunnelConn) waitPaired(timeout time.Duration) error {
 			return errors.New("relay: paired socket closed before use")
 		}
 		if op == opPing {
-			t.ws.writeMu.Lock()
 			_ = t.ws.writeFrame(opPong, data, true)
-			t.ws.writeMu.Unlock()
 			continue
 		}
 		// Ignore anything else until OK or close.

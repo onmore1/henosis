@@ -44,8 +44,12 @@ func (h *HostAcceptor) Run(ctx context.Context) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			defer func() { <-sem }()
-			if err := h.acceptOnce(ctx); err != nil {
+			// The slot is given back as soon as this socket is paired (or
+			// fails), so a fresh one starts waiting while this one pipes.
+			var once sync.Once
+			release := func() { once.Do(func() { <-sem }) }
+			defer release()
+			if err := h.acceptOnce(ctx, release); err != nil {
 				h.logf("relay accept: %v", err)
 				// Back off a little before trying again, so a misconfigured
 				// relay does not spin us flat out.
@@ -58,7 +62,9 @@ func (h *HostAcceptor) Run(ctx context.Context) {
 	}
 }
 
-func (h *HostAcceptor) acceptOnce(ctx context.Context) error {
+// acceptOnce waits on one accept socket. It calls paired as soon as a friend
+// is paired with it, before piping, so the caller can open the next one.
+func (h *HostAcceptor) acceptOnce(ctx context.Context, paired func()) error {
 	dialCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	ws, err := dialWS(dialCtx, buildURL(h.RelayURL, "/accept", h.Code))
 	cancel()
@@ -68,18 +74,19 @@ func (h *HostAcceptor) acceptOnce(ctx context.Context) error {
 	t := newTunnelConn(ws)
 	// Wait up to 10 minutes to be paired. The worker closes unpaired
 	// sockets at 10 minutes anyway. If ctx cancels first, close the socket.
-	paired := make(chan error, 1)
-	go func() { paired <- t.waitPaired(10 * time.Minute) }()
+	result := make(chan error, 1)
+	go func() { result <- t.waitPaired(10 * time.Minute) }()
 	select {
 	case <-ctx.Done():
 		t.Close()
 		return nil
-	case err := <-paired:
+	case err := <-result:
 		if err != nil {
 			t.Close()
 			return nil // nothing paired; normal
 		}
 	}
+	paired()
 	// Paired — connect to the local HTTP server and pipe.
 	local, err := (&net.Dialer{Timeout: 3 * time.Second}).DialContext(ctx, "tcp", h.LocalAddr)
 	if err != nil {
@@ -87,6 +94,8 @@ func (h *HostAcceptor) acceptOnce(ctx context.Context) error {
 		return fmt.Errorf("dial local %s: %w", h.LocalAddr, err)
 	}
 	h.logf("relay: paired a friend, piping to %s", h.LocalAddr)
+	stop := context.AfterFunc(ctx, func() { t.Close(); local.Close() })
+	defer stop()
 	pipe(t, local)
 	return nil
 }
