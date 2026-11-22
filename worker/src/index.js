@@ -47,10 +47,18 @@ export class Rendezvous {
     const [client, server] = Object.values(pair);
     server.accept();
 
-    // Pair immediately if the other side is already waiting.
-    const other = side === "accept" ? this.dials.shift() : this.accepts.shift();
+    // Pair immediately if the other side is already waiting. Sockets that
+    // went away while waiting are skipped.
+    const queue = side === "accept" ? this.dials : this.accepts;
+    let other = queue.shift();
+    while (other && other.ws.readyState !== 1 /* OPEN */) other = queue.shift();
     if (other) {
-      this.pipe(server, other);
+      try {
+        this.pipe(server, other.ws);
+      } catch (e) {
+        try { server.close(1011, "pairing failed"); } catch (_) {}
+        try { other.ws.close(1011, "pairing failed"); } catch (_) {}
+      }
     } else {
       this.enqueue(server, side);
     }
