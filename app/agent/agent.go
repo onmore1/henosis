@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"henosis/agent/relay"
 	"henosis/client"
 	"henosis/config"
 	"henosis/core"
@@ -311,11 +312,23 @@ func (a *Agent) connect() {
 	if !a.cfg.SignedIn() {
 		return
 	}
-	a.cl = client.New(a.cfg.Server, a.cfg.Token, a.cfg.Device)
+	a.cl = a.clientFor(a.cfg.Server, a.cfg.Token)
 	a.me = core.UserView{ID: a.cfg.UserID, Name: a.cfg.User}
 	for _, link := range a.cfg.Links {
 		a.startRunner(link)
 	}
+}
+
+// clientFor builds a client for the stored server URL. A URL beginning with
+// "relay://" means the friend signed in through the relay; the hex code
+// after the scheme is the session secret used to dial through it.
+func (a *Agent) clientFor(server, token string) *client.Client {
+	if strings.HasPrefix(server, "relay://") {
+		code := strings.TrimPrefix(server, "relay://")
+		rc := relay.NewHTTPClient(a.cfg.RelayURL(), code)
+		return client.NewWith("http://relay", token, a.cfg.Device, rc)
+	}
+	return client.New(server, token, a.cfg.Device)
 }
 
 func (a *Agent) startRunner(link config.Link) {
@@ -457,7 +470,12 @@ func (a *Agent) Login(server, token string) error {
 	if device == "" {
 		device = config.NewDevice()
 	}
-	me, err := client.New(server, token, device).Me()
+	// For a relay://<code> URL we build the client with the relay transport.
+	oldDevice := a.cfg.Device
+	a.cfg.Device = device
+	cl := a.clientFor(server, token)
+	a.cfg.Device = oldDevice
+	me, err := cl.Me()
 	if err != nil {
 		if errors.Is(err, core.ErrSignIn) {
 			return errors.New("the server did not accept that token")

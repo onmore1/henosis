@@ -183,6 +183,9 @@ function render() {
     put("people", `In the session: <b style="color:var(--text)">${h.accounts.map(esc).join(", ")}</b>`);
     put("hostAddr", (h.addresses.length ? h.addresses.map((a) => `<div>${esc(a)}</div>`).join("") : "No network connection found.") + (h.extra ? `<div>extra: ${esc(h.extra)}</div>` : ""));
     put("hostData", `Projects are stored in ${esc(h.data_dir)}`);
+    const relayIn = document.getElementById("relayUrl");
+    if (relayIn && relayIn !== document.activeElement && relayIn.value !== (h.relay || "")) relayIn.value = h.relay || "";
+    put("relayState", h.relay ? `Relay on: friends who cannot reach you directly will be paired through <b style="color:var(--text)">${esc(h.relay)}</b>.` : "Relay off. A friend needs to be on the same network, both of you on Tailscale, or an address added by hand.");
   } else {
     put("joined", `You are in the session at ${esc(state.server)}.${h.problem ? " Hosting on this computer failed: " + esc(h.problem) + "." : ""}`);
   }
@@ -224,6 +227,9 @@ function signedIn(hosting) {
         <label>Add an address by hand (a public IP or a domain, if you forwarded port 8787 on your router)</label>
         <div class="inline"><input id="extraAddr" placeholder="203.0.113.9" autocomplete="off"><button id="saveExtra">Save</button></div>
         <div class="meta" style="margin-left:0" id="hostData"></div>
+        <label style="margin-top:14px">Relay URL (optional — lets friends connect from anywhere, without Tailscale)</label>
+        <div class="inline"><input id="relayUrl" placeholder="https://henosis-relay.your-account.workers.dev" autocomplete="off"><button id="saveRelay">Save</button></div>
+        <div class="meta" style="margin-left:0" id="relayState"></div>
         <div class="row" style="margin-left:0"><button class="quiet" id="newCode" title="The old code stops working for new friends. Everyone already connected stays.">Make a new code</button><button class="quiet" id="hostStop" title="Friends cannot sync until you start it again. Nothing is deleted.">Stop the session</button></div></details></div>`
     : `<div class="card"><div class="detail" style="margin-left:0" id="joined"></div></div>`;
   return `<div class="layout"><div>
@@ -356,6 +362,7 @@ document.addEventListener("click", (e) => {
   else if (t.id === "login") act("/api/login", {server: val("server"), token: val("token")});
   else if (t.id === "copyCode") copyText(state.host.code, "Code copied. Send it to your friend.");
   else if (t.id === "saveExtra") act("/api/host/extra", {text: val("extraAddr")}, () => toast("The code now includes that address. Send the new code."));
+  else if (t.id === "saveRelay") act("/api/host/relay", {text: val("relayUrl")}, () => toast(val("relayUrl") ? "Relay saved. Friends can now connect from anywhere." : "Relay turned off."));
   else if (t.id === "newCode") { if (confirm("Make a new code? The old code stops working for new friends. Everyone already connected stays connected.")) act("/api/host/new-code"); }
   else if (t.id === "hostStop") { if (confirm("Stop the session? Friends cannot sync until you start it again. The projects stay on this computer.")) act("/api/host/stop"); }
   else if (t.id === "addProject") pickFolder();
@@ -385,7 +392,7 @@ document.addEventListener("change", (e) => {
 // Enter in a field presses the button that belongs to it.
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Enter" || !(e.target instanceof HTMLInputElement)) return;
-  const partner = {myName: "startSession", joinCode: "joinSession", token: "login", newFolder: "create", noteInput: "setNote", commentInput: "sendComment", extraAddr: "saveExtra"}[e.target.id];
+  const partner = {myName: "startSession", joinCode: "joinSession", token: "login", newFolder: "create", noteInput: "setNote", commentInput: "sendComment", extraAddr: "saveExtra", relayUrl: "saveRelay"}[e.target.id];
   if (partner && document.getElementById(partner)) document.getElementById(partner).click();
 });
 

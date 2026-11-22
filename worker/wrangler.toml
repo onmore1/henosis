@@ -1,0 +1,11 @@
+name = "henosis-relay"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+[[durable_objects.bindings]]
+name = "RENDEZVOUS"
+class_name = "Rendezvous"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["Rendezvous"]

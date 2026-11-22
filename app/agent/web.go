@@ -123,6 +123,7 @@ func (a *Agent) Handler() http.Handler {
 	post("/api/connect", func(r *http.Request, in body) (any, error) { return nil, a.Connect(in.Name, in.Code) })
 	post("/api/host/new-code", func(r *http.Request, in body) (any, error) { return nil, a.HostNewCode() })
 	post("/api/host/extra", func(r *http.Request, in body) (any, error) { return nil, a.HostSetExtra(in.Text) })
+	post("/api/host/relay", func(r *http.Request, in body) (any, error) { return nil, a.SetRelay(in.Text) })
 	post("/api/host/stop", func(r *http.Request, in body) (any, error) { return nil, a.HostStop() })
 	post("/api/host/account", func(r *http.Request, in body) (any, error) {
 		token, err := a.HostAddAccount(in.Name)

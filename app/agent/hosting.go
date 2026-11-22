@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"henosis/agent/relay"
 	"henosis/client"
 	"henosis/config"
 	"henosis/core"
@@ -25,11 +26,13 @@ import (
 
 // hosting is the server running inside the app, when this computer hosts.
 type hosting struct {
-	st      *store.Store
-	srv     *http.Server
-	port    int
-	problem string
-	stop    chan struct{}
+	st         *store.Store
+	srv        *http.Server
+	port       int
+	problem    string
+	stop       chan struct{}
+	relayStop  context.CancelFunc // cancels the relay acceptor, if running
+	relayURL   string             // the relay the acceptor is talking to
 }
 
 // HostState is what the status page shows about the built-in server.
@@ -42,6 +45,7 @@ type HostState struct {
 	Problem   string   `json:"problem,omitempty"`
 	Code      string   `json:"code"`  // the session code to give to a friend
 	Extra     string   `json:"extra"` // an address the host added by hand
+	Relay     string   `json:"relay"` // the relay URL, if one is set
 }
 
 func (a *Agent) hostDir() string { return filepath.Join(a.cfg.Dir(), "server-data") }
@@ -108,6 +112,21 @@ func (a *Agent) startHosting(port int) error {
 		}
 	}(a.host)
 	a.logf("info", "server: running on this computer, port %d, data in %s", a.host.port, a.hostDir())
+	// If a relay is configured, keep a small pool of accept sockets open to
+	// it so a friend's Hénōsis can reach us when no direct address works.
+	if url := a.cfg.RelayURL(); url != "" {
+		relayCtx, cancel := context.WithCancel(context.Background())
+		a.host.relayStop = cancel
+		a.host.relayURL = url
+		acc := &relay.HostAcceptor{
+			RelayURL:  url,
+			Code:      a.cfg.Host.JoinSecret,
+			LocalAddr: "127.0.0.1:" + strconv.Itoa(a.host.port),
+			Logf:      func(f string, args ...any) { a.logf("debug", f, args...) },
+		}
+		go acc.Run(relayCtx)
+		a.logf("info", "relay: on, pairing through %s", url)
+	}
 	return nil
 }
 
@@ -115,6 +134,9 @@ func (a *Agent) startHosting(port int) error {
 func (a *Agent) stopHosting() {
 	if a.host.srv == nil {
 		return
+	}
+	if a.host.relayStop != nil {
+		a.host.relayStop()
 	}
 	close(a.host.stop)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -139,6 +161,7 @@ func (a *Agent) hostState() HostState {
 		st.Addresses = append(st.Addresses, "http://"+ip+":"+strconv.Itoa(st.Port))
 	}
 	st.Extra = a.cfg.Host.Extra
+	st.Relay = a.cfg.RelayURL()
 	if code, err := EncodeCode(ips, st.Port, st.Extra, a.cfg.Host.JoinSecret); err == nil {
 		st.Code = code
 	}
@@ -194,6 +217,47 @@ func (a *Agent) HostSetExtra(address string) error {
 	return a.cfg.Save()
 }
 
+// SetRelay stores the relay URL in the config. An empty string turns the
+// relay off. If hosting is running, the acceptor is restarted so the change
+// takes effect right away.
+func (a *Agent) SetRelay(url string) error {
+	url = strings.TrimSpace(url)
+	// Light validation: must start with https:// (or http:// for local dev).
+	if url != "" && !strings.HasPrefix(url, "https://") && !strings.HasPrefix(url, "http://") {
+		return errors.New("the relay URL should start with https://")
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.cfg.Relay = url
+	if err := a.cfg.Save(); err != nil {
+		return err
+	}
+	// If hosting is up and the URL changed, restart the relay acceptor.
+	if a.host.srv != nil && a.host.relayURL != a.cfg.RelayURL() {
+		if a.host.relayStop != nil {
+			a.host.relayStop()
+			a.host.relayStop = nil
+			a.host.relayURL = ""
+		}
+		if newURL := a.cfg.RelayURL(); newURL != "" {
+			relayCtx, cancel := context.WithCancel(context.Background())
+			a.host.relayStop = cancel
+			a.host.relayURL = newURL
+			acc := &relay.HostAcceptor{
+				RelayURL:  newURL,
+				Code:      a.cfg.Host.JoinSecret,
+				LocalAddr: "127.0.0.1:" + strconv.Itoa(a.host.port),
+				Logf:      func(f string, args ...any) { a.logf("debug", f, args...) },
+			}
+			go acc.Run(relayCtx)
+			a.logf("info", "relay: on, pairing through %s", newURL)
+		} else {
+			a.logf("info", "relay: off")
+		}
+	}
+	return nil
+}
+
 // Connect joins a friend's session: it finds their computer through the
 // session code, creates an account with the given name and signs in.
 func (a *Agent) Connect(name, code string) error {
@@ -212,7 +276,7 @@ func (a *Agent) Connect(name, code string) error {
 	}
 	a.mu.Unlock()
 
-	// Try every address at once; the first that answers wins.
+	// Try every direct address at once; the first that answers wins.
 	found := make(chan string, len(addresses))
 	for _, address := range addresses {
 		go func(address string) {
@@ -230,11 +294,45 @@ func (a *Agent) Connect(name, code string) error {
 			break
 		}
 	}
+	// No direct address worked — try the relay, if one is configured.
+	var relayClient *http.Client
 	if server == "" {
-		return fmt.Errorf("could not reach your friend's computer (tried %s). Is Henosis open there, and are you both on the same network or both on Tailscale?", strings.Join(addresses, ", "))
+		if url := a.cfg.RelayURL(); url != "" {
+			a.logf("info", "connect: no direct address worked; trying the relay")
+			rc := relay.NewHTTPClient(url, secret)
+			if client.ReachableWithClient("http://relay", rc) {
+				server = "http://relay"
+				relayClient = rc
+			} else {
+				a.logf("debug", "connect: relay did not pair; is Henosis open on the host?")
+			}
+		}
 	}
-	a.logf("info", "connect: found the session at %s", server)
-	_, token, err := client.Join(server, secret, name)
+	if server == "" {
+		hint := "Is Henosis open there, and are you both on the same network or both on Tailscale?"
+		if a.cfg.RelayURL() == "" {
+			hint += " You can also set a relay URL under Advanced to connect from anywhere."
+		} else {
+			hint = "Is Henosis open on your friend's computer?"
+		}
+		return fmt.Errorf("could not reach your friend's computer (tried %s). %s", strings.Join(addresses, ", "), hint)
+	}
+	if relayClient != nil {
+		a.logf("info", "connect: paired through the relay")
+	} else {
+		a.logf("info", "connect: found the session at %s", server)
+	}
+	var token string
+	if relayClient != nil {
+		_, token, err = client.JoinWithClient(server, secret, name, relayClient)
+	} else {
+		_, token, err = client.Join(server, secret, name)
+	}
+	// If we went through the relay, store a sentinel server URL so later
+	// sessions re-dial through the relay with the same secret.
+	if relayClient != nil {
+		server = "relay://" + secret
+	}
 	switch {
 	case errors.Is(err, core.ErrNameTaken):
 		return fmt.Errorf("someone in this session is already called %q; pick another name", name)

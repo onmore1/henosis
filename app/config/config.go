@@ -40,6 +40,9 @@ type Config struct {
 	Port   int    `json:"status_port,omitempty"`
 	Links  []Link `json:"links"`
 	Host   Host   `json:"host"`
+	// Relay is the Cloudflare Worker URL (https://…workers.dev) that pairs
+	// two Henosis instances when no direct address works. Empty = off.
+	Relay string `json:"relay,omitempty"`
 	// AutoLink puts every project of the session on this computer by itself.
 	AutoLink bool `json:"auto_link,omitempty"`
 	// Skipped are projects the user took off this computer on purpose.
@@ -57,6 +60,20 @@ type Host struct {
 	// Extra is an address the host added to the code by hand.
 	Extra string `json:"extra,omitempty"`
 }
+
+// RelayURL is the Cloudflare Worker that pairs the host and the friend when
+// neither can reach the other directly. Empty means the relay is off, and
+// Henosis falls back to the direct addresses alone (LAN, Tailscale, or an
+// address the host added by hand). Reads the env var first so a user can
+// try a different relay without touching the config.
+func (c *Config) RelayURL() string {
+	if v := strings.TrimSpace(os.Getenv("HENOSIS_RELAY")); v != "" {
+		return v
+	}
+	return strings.TrimSpace(c.Relay)
+}
+
+// Relay is persisted in config.json. Use RelayURL to read the effective value.
 
 // DefaultServerPort is where a hosted server listens.
 const DefaultServerPort = 8787

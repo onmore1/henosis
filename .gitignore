@@ -18,3 +18,4 @@ spike/watchspike-log.txt
 dist/
 *.zip
 app/uitest/last-run*.png
+app/henosis-agent

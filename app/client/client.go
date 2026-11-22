@@ -147,7 +147,17 @@ func Join(baseURL, secret, name string) (core.UserView, string, error) {
 // Reachable reports whether a Henosis server answers at baseURL within the
 // given time.
 func Reachable(baseURL string, within time.Duration) bool {
-	resp, err := (&http.Client{Timeout: within}).Get(strings.TrimRight(baseURL, "/") + "/v1/health")
+	return reachableWith(baseURL, &http.Client{Timeout: within})
+}
+
+// ReachableWithClient is like Reachable but uses the given HTTP client, so
+// callers can probe through the relay.
+func ReachableWithClient(baseURL string, client *http.Client) bool {
+	return reachableWith(baseURL, client)
+}
+
+func reachableWith(baseURL string, client *http.Client) bool {
+	resp, err := client.Get(strings.TrimRight(baseURL, "/") + "/v1/health")
 	if err != nil {
 		return false
 	}
@@ -156,6 +166,24 @@ func Reachable(baseURL string, within time.Duration) bool {
 		OK bool `json:"ok"`
 	}
 	return resp.StatusCode == http.StatusOK && json.NewDecoder(resp.Body).Decode(&out) == nil && out.OK
+}
+
+// NewWith returns a client that uses the given HTTP client. Hénōsis uses
+// this to hand the client a transport that dials through the relay.
+func NewWith(baseURL, token, device string, httpClient *http.Client) *Client {
+	return &Client{BaseURL: strings.TrimRight(baseURL, "/"), Token: token, Device: device, HTTP: httpClient}
+}
+
+// JoinWithClient is like Join but uses the given HTTP client. Hénōsis uses
+// this to join through the relay.
+func JoinWithClient(baseURL, secret, name string, httpClient *http.Client) (core.UserView, string, error) {
+	c := NewWith(baseURL, "", "", httpClient)
+	var out struct {
+		Token string        `json:"token"`
+		User  core.UserView `json:"user"`
+	}
+	_, err := c.call("POST", "/join", map[string]string{"secret": secret, "name": name}, &out)
+	return out.User, out.Token, err
 }
 
 // Me returns the signed-in user.
