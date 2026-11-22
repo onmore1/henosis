@@ -646,6 +646,11 @@ func TestConnectThroughTheRelay(t *testing.T) {
 	// The code will carry an address nobody can reach (TEST-NET-1).
 	ann.a.LocalIPs = func() []string { return []string{"192.0.2.1"} }
 
+	for _, bad := range []string{"https://henosis-relay.<your-account>.workers.dev", "https://", "https://relay", "workers.dev"} {
+		if code, _ := ann.call("POST", "/api/host/relay", map[string]string{"text": bad}, nil); code != 400 {
+			t.Errorf("relay %q was accepted", bad)
+		}
+	}
 	ann.ok("/api/host/relay", map[string]string{"text": relaySrv.URL}, nil)
 	ann.ok("/api/host/start", map[string]any{"name": "ann", "port": 0}, nil)
 	st := ann.state()

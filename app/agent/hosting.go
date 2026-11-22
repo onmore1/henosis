@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -225,6 +226,16 @@ func (a *Agent) SetRelay(url string) error {
 	// Light validation: must start with https:// (or http:// for local dev).
 	if url != "" && !strings.HasPrefix(url, "https://") && !strings.HasPrefix(url, "http://") {
 		return errors.New("the relay URL should start with https://")
+	}
+	if url != "" {
+		u, err := neturl.Parse(url)
+		host := ""
+		if err == nil {
+			host = u.Hostname()
+		}
+		if host == "" || strings.ContainsAny(host, "<>{} ") || (!strings.Contains(host, ".") && host != "localhost") {
+			return errors.New("that is not a full relay address; paste the one wrangler deploy printed, like https://henosis-relay.yourname.workers.dev")
+		}
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
