@@ -68,6 +68,8 @@ func (a *Agent) Handler() http.Handler {
 		Days       int                `json:"days"`
 		Port       int                `json:"port"`
 		On         bool               `json:"on"`
+		AutoSend   bool               `json:"auto_send"`
+		AutoUpdate bool               `json:"auto_update"`
 		Text       string             `json:"text"`
 		File       string             `json:"file"`
 		Files      []agentDroppedFile `json:"files"`
@@ -183,6 +185,16 @@ func (a *Agent) Handler() http.Handler {
 			return nil, worker.Comment(in.SnapshotID, in.Text)
 		case "open-folder":
 			return nil, OpenPath(worker.Link.Folder)
+		case "open-project":
+			return nil, a.OpenProject(id)
+		case "send":
+			worker.SendNow()
+		case "update":
+			worker.UpdateNow()
+		case "auto":
+			worker.SetAutoSend(in.AutoSend)
+			worker.SetAutoUpdate(in.AutoUpdate)
+			return nil, a.SetAuto(id, in.AutoSend, in.AutoUpdate)
 		default:
 			return nil, errors.New("unknown action")
 		}

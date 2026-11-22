@@ -21,7 +21,7 @@ import (
 
 // Version is the release of the app. It is a variable so a test can build
 // an "older" app.
-var Version = "0.5.0"
+var Version = "0.6.0"
 
 // Agent runs one worker per linked project and carries out what the user
 // asks for on the status page.
@@ -738,11 +738,51 @@ func (a *Agent) SetLifetime(projectID string, days int) error {
 	return err
 }
 
-// OpenPath shows a folder in the file manager.
+// SetAuto saves the auto-send and auto-update settings for a project.
+func (a *Agent) SetAuto(projectID string, autoSend, autoUpdate bool) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	link := a.cfg.LinkByProject(projectID)
+	if link == nil {
+		return errors.New("project not found")
+	}
+	link.NoAutoSend = !autoSend
+	link.NoAutoUpdate = !autoUpdate
+	return a.cfg.Save()
+}
+
+// OpenProject opens the main .flp file of a project in FL Studio.
+func (a *Agent) OpenProject(projectID string) error {
+	w, err := a.Worker(projectID)
+	if err != nil {
+		return err
+	}
+	path := w.MainFLP()
+	if path == "" {
+		return errors.New("no .flp file found in the project folder")
+	}
+	return OpenFile(path)
+}
+
+// OpenPath shows a folder in the file manager. On Windows it uses
+// "cmd /c start" so the window comes to the front.
 func OpenPath(path string) error {
 	switch runtime.GOOS {
 	case "windows":
-		return exec.Command("explorer.exe", path).Start()
+		return quiet("cmd", "/c", "start", "", path).Start()
+	case "darwin":
+		return exec.Command("open", path).Start()
+	default:
+		return exec.Command("xdg-open", path).Start()
+	}
+}
+
+// OpenFile opens a file in its default application. On Windows a .flp
+// file opens in FL Studio.
+func OpenFile(path string) error {
+	switch runtime.GOOS {
+	case "windows":
+		return quiet("cmd", "/c", "start", "", path).Start()
 	case "darwin":
 		return exec.Command("open", path).Start()
 	default:

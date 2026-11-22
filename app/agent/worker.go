@@ -88,6 +88,8 @@ type Status struct {
 	LastActivity    string   `json:"last_activity,omitempty"`
 	NextNote        string   `json:"next_note,omitempty"` // the note that goes with the next save
 	Gone            bool     `json:"gone"`                // the project is not in the session any more
+	AutoSend        bool     `json:"auto_send"`
+	AutoUpdate      bool     `json:"auto_update"`
 }
 
 type flpEntry struct {
@@ -142,6 +144,11 @@ type Worker struct {
 	pollLogged   bool
 	lastHeadline string
 
+	autoSend   bool // upload local changes automatically
+	autoUpdate bool // download new versions automatically
+	sendOnce   bool // one-shot: send now even if auto-send is off
+	updateOnce bool // one-shot: update now even if auto-update is off
+
 	nextNote        string // what the user wrote about the next save
 	allowMassDelete bool
 	needsConfirm    string
@@ -161,7 +168,10 @@ type Worker struct {
 func NewWorker(link config.Link, api ProjectAPI, me core.UserView, device string, det fl.Detector, timing Timing, now func() time.Time) *Worker {
 	w := &Worker{
 		Link: link, api: api, me: me, device: device, det: det, now: now, timing: timing,
-		log: func(string, string, ...any) {}, flps: map[string]flpEntry{},
+		log:        func(string, string, ...any) {},
+		flps:       map[string]flpEntry{},
+		autoSend:   !link.NoAutoSend,
+		autoUpdate: !link.NoAutoUpdate,
 	}
 	w.eng = engine.Open(link.Folder, sessionRemote{ProjectAPI: api, w: w}, me.Name)
 	w.eng.BeforeApply = w.beforeApply
@@ -311,7 +321,8 @@ func (w *Worker) tick() {
 			w.acquire(now)
 		}
 		w.beat(now)
-		if w.dirty() && quiet && atHead && (!shared || w.holding) && canRetry && w.needsConfirm == "" {
+		if w.dirty() && quiet && atHead && (!shared || w.holding) && canRetry && w.needsConfirm == "" && (w.autoSend || w.sendOnce) {
+			w.sendOnce = false
 			w.run(now, "Uploading your save", func() (engine.Result, error) { return w.eng.Push(w.pushOptions()) })
 		}
 		return
@@ -319,14 +330,16 @@ func (w *Worker) tick() {
 
 	// 4b. Not open: pull what is new, upload what changed here.
 	w.beat(now)
-	wantPush := w.dirty() && quiet && w.needsConfirm == "" && (!shared || w.holding || !other)
-	wantPull := !atHead && w.project.Head != ""
+	wantPush := w.dirty() && quiet && w.needsConfirm == "" && (!shared || w.holding || !other) && (w.autoSend || w.sendOnce)
+	wantPull := !atHead && w.project.Head != "" && (w.autoUpdate || w.updateOnce)
 	fullCheck := w.synced && quiet && now.Sub(w.lastFull) >= w.timing.FullCheck
 	if canRetry && !view.Saving {
 		switch {
 		case wantPush || fullCheck:
+			w.sendOnce = false
 			w.run(now, "Syncing", func() (engine.Result, error) { return w.eng.Sync(w.pushOptions()) })
 		case wantPull:
+			w.updateOnce = false
 			w.run(now, "Downloading the newest version", func() (engine.Result, error) { return w.eng.Pull() })
 		}
 	}
@@ -606,6 +619,7 @@ func (w *Worker) publish() {
 		Online: w.online, OpenInFL: w.open, HoldingLock: w.holding, Yielded: w.yielded,
 		Conflicts: append([]string{}, w.view.Conflicts...), OutsideSamples: []string{}, Members: []string{},
 		ConfirmDelete: w.needsConfirm, LastActivity: w.lastActivity, NextNote: w.nextNote, Gone: w.gone,
+		AutoSend: w.autoSend, AutoUpdate: w.autoUpdate,
 	}
 	if !w.lastSync.IsZero() {
 		st.LastSync = w.lastSync.UTC().Format(time.RFC3339)
@@ -716,6 +730,74 @@ func (w *Worker) SyncNow() {
 	defer w.mu.Unlock()
 	w.retryAt, w.lockRetryAt, w.lastFull, w.pollNow = time.Time{}, time.Time{}, time.Time{}, true
 	w.synced = false
+}
+
+// SendNow triggers one upload even when auto-send is off.
+func (w *Worker) SendNow() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.sendOnce = true
+	w.retryAt, w.lastFull, w.pollNow = time.Time{}, time.Time{}, true
+	w.synced = false
+}
+
+// UpdateNow triggers one download even when auto-update is off.
+func (w *Worker) UpdateNow() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.updateOnce = true
+	w.retryAt, w.pollNow = time.Time{}, true
+}
+
+// SetAutoSend turns automatic uploading on or off for this project.
+func (w *Worker) SetAutoSend(on bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.autoSend = on
+	if on {
+		w.retryAt, w.lastFull = time.Time{}, time.Time{}
+		w.synced = false
+	}
+	w.publish()
+}
+
+// SetAutoUpdate turns automatic downloading on or off for this project.
+func (w *Worker) SetAutoUpdate(on bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.autoUpdate = on
+	if on {
+		w.retryAt, w.pollNow = time.Time{}, true
+	}
+	w.publish()
+}
+
+// MainFLP returns the path of the main .flp file in the project folder:
+// the most recently modified one.
+func (w *Worker) MainFLP() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	var best string
+	var bestTime int64
+	for rel, entry := range w.flps {
+		if entry.st.MTime >= bestTime {
+			bestTime = entry.st.MTime
+			best = rel
+		}
+	}
+	if best == "" {
+		// No parsed FLP; fall back to any .flp in the view.
+		for rel, st := range w.view.FLPs {
+			if st.MTime >= bestTime {
+				bestTime = st.MTime
+				best = rel
+			}
+		}
+	}
+	if best == "" {
+		return ""
+	}
+	return filepath.Join(w.Link.Folder, filepath.FromSlash(best))
 }
 
 // ConfirmDelete lets the next upload remove more than half of the files.

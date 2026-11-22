@@ -22,6 +22,12 @@ type Link struct {
 	ProjectID string `json:"project_id"`
 	Name      string `json:"name"`
 	Folder    string `json:"folder"`
+	// NoAutoSend disables automatic uploading of local changes.
+	// When true the user clicks "Send changes" or toggles auto-send back on.
+	NoAutoSend bool `json:"no_auto_send,omitempty"`
+	// NoAutoUpdate disables automatic downloading of new versions.
+	// When true the user clicks "Update now" or toggles auto-update back on.
+	NoAutoUpdate bool `json:"no_auto_update,omitempty"`
 }
 
 // Config is the content of config.json.
