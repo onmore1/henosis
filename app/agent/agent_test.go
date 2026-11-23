@@ -752,3 +752,38 @@ func TestStartANewSession(t *testing.T) {
 		t.Fatal("start-new worked while signed in")
 	}
 }
+
+// TestJoiningStartsClean: projects from a session you were in before are
+// not carried into the next one as "No longer available" cards. Their
+// files stay where they are.
+func TestJoiningStartsClean(t *testing.T) {
+	ann, bob := newDesk(t, "ann"), newDesk(t, "bob")
+	// Bob had a session of his own, with a project.
+	bob.ok("/api/host/start", map[string]any{"name": "bob", "port": 0}, nil)
+	old := filepath.Join(bob.home, "Beats", "Roskirt")
+	os.MkdirAll(old, 0o755)
+	os.WriteFile(filepath.Join(old, "Roskirt.flp"), []byte("mine"), 0o644)
+	bob.ok("/api/create", map[string]string{"folder": old}, nil)
+	bob.ok("/api/host/stop", nil, nil)
+	bob.ok("/api/logout", nil, nil)
+
+	// Now he joins Ann's.
+	ann.ok("/api/host/start", map[string]any{"name": "ann", "port": 0}, nil)
+	song := filepath.Join(ann.home, "Beats", "Sacred")
+	os.MkdirAll(song, 0o755)
+	os.WriteFile(filepath.Join(song, "Sacred.flp"), []byte("v1"), 0o644)
+	ann.ok("/api/create", map[string]string{"folder": song}, nil)
+	bob.ok("/api/connect", map[string]string{"name": "bob", "code": ann.state().Host.Code}, nil)
+	eventually(t, "ann's project at bob's", func() bool {
+		s := bob.state()
+		return len(s.Projects) == 1 && s.Projects[0].Name == "Sacred"
+	})
+	for _, p := range bob.state().Projects {
+		if p.Name == "Roskirt" {
+			t.Fatal("the project from bob's own session followed him in")
+		}
+	}
+	if data, _ := os.ReadFile(filepath.Join(old, "Roskirt.flp")); string(data) != "mine" {
+		t.Fatal("the old project's files were touched")
+	}
+}

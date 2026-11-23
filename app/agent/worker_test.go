@@ -778,34 +778,60 @@ func TestCollectSamples(t *testing.T) {
 	b.write(b.ann, "My Song.flp", string(flptest.Project("", samples, "")))
 	b.pass(8)
 
-	st := b.want(b.ann, "synced", "Up to date")
-	if !reflect.DeepEqual(st.OutsideSamples, []string{kick, vocal, twin, gone}) {
-		t.Fatalf("outside samples: %q", st.OutsideSamples)
-	}
-	result, err := b.ann.w.CollectSamples()
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := agent.CollectResult{Copied: []string{"kick.wav", "vocal take.wav"}, NotFound: []string{gone}, Clashes: []string{twin}}
-	if !reflect.DeepEqual(result, want) {
-		t.Fatalf("collect: %+v", result)
-	}
+	// The samples that are on this computer were copied next to the project
+	// file by themselves, and the partner got them, with nobody pressing
+	// anything.
 	if read(b.ann, "kick.wav") != "KICK" || read(b.ann, "vocal take.wav") != "VOCAL" {
-		t.Fatal("the samples were not copied next to the project file")
+		t.Fatalf("the samples were not copied next to the project file: %v", tree(b.ann.folder))
 	}
 	b.pass(10)
-	// The partner gets the samples; only the one that is nowhere stays listed.
 	if read(b.bob, "kick.wav") != "KICK" || read(b.bob, "vocal take.wav") != "VOCAL" {
 		t.Fatalf("bob did not get the samples: %v", tree(b.bob.folder))
 	}
-	if st := b.ann.w.Status(); !reflect.DeepEqual(st.OutsideSamples, []string{gone}) {
-		t.Fatalf("outside samples afterwards: %q", st.OutsideSamples)
+	// What is left to say: a different sample with a name already taken,
+	// and one that is on no computer at all.
+	st := b.ann.w.Status()
+	if !reflect.DeepEqual(st.OutsideSamples, []string{twin}) || !reflect.DeepEqual(st.MissingSamples, []string{"deleted.wav"}) {
+		t.Fatalf("after copying: clashes %q, missing %q", st.OutsideSamples, st.MissingSamples)
 	}
-	// Collecting again copies nothing new and overwrites nothing.
-	os.WriteFile(kick, []byte("CHANGED ON DISK"), 0o644)
-	again, err := b.ann.w.CollectSamples()
-	if err != nil || len(again.Copied) != 0 || read(b.ann, "kick.wav") != "KICK" {
-		t.Fatalf("second collect: %+v %v", again, err)
+	if read(b.ann, "kick.wav") != "KICK" {
+		t.Fatal("the same-named sample replaced the first one")
+	}
+	// Collecting by hand finds nothing more, and overwrites nothing.
+	result, err := b.ann.w.CollectSamples()
+	want := agent.CollectResult{NotFound: []string{gone}, Clashes: []string{twin}}
+	if err != nil || !reflect.DeepEqual(result, want) {
+		t.Fatalf("collect by hand: %+v %v", result, err)
+	}
+	os.WriteFile(vocal, []byte("CHANGED ON DISK"), 0o644)
+	b.pass(5)
+	if read(b.ann, "vocal take.wav") != "VOCAL" {
+		t.Fatal("a copy in the project was overwritten")
+	}
+}
+
+// A sample that is only on the other computer is reported as missing here,
+// and arrives once the computer that has it runs Henosis.
+func TestSampleOnlyOnTheOtherComputer(t *testing.T) {
+	b := newBench(t, true)
+	elsewhere := filepath.Join(b.dir, "roman downloads", "Mystic Stylez Open Hat.wav")
+	samples := []string{elsewhere}
+	// Ann's project refers to a sample that is not on disk yet (her pack
+	// is still downloading), so she cannot copy it.
+	b.write(b.ann, "My Song.flp", string(flptest.Project("", samples, "")))
+	b.pass(10)
+	if st := b.bob.w.Status(); !reflect.DeepEqual(st.MissingSamples, []string{"Mystic Stylez Open Hat.wav"}) {
+		t.Fatalf("bob's missing samples: %q", st.MissingSamples)
+	}
+	// The pack finishes downloading at ann's: the hat travels on its own.
+	os.MkdirAll(filepath.Dir(elsewhere), 0o755)
+	os.WriteFile(elsewhere, []byte("OPEN HAT"), 0o644)
+	b.pass(12)
+	if read(b.bob, "Mystic Stylez Open Hat.wav") != "OPEN HAT" {
+		t.Fatalf("the hat did not reach bob: %v", tree(b.bob.folder))
+	}
+	if st := b.bob.w.Status(); len(st.MissingSamples) != 0 {
+		t.Fatalf("still reported missing at bob's: %q", st.MissingSamples)
 	}
 }
 

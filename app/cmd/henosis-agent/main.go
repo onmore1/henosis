@@ -10,12 +10,22 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime/debug"
 
 	"henosis/cli"
 	"henosis/config"
 )
 
 func main() {
+	// The window has no console, so a crash would vanish without a word.
+	// Keep its report next to the log instead.
+	dir := filepath.Dir(config.DefaultPath())
+	if os.MkdirAll(dir, 0o700) == nil {
+		if f, err := os.OpenFile(filepath.Join(dir, "crash.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); err == nil {
+			debug.SetCrashOutput(f, debug.CrashOptions{})
+			f.Close()
+		}
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	cli.SelfArgs = "--background"

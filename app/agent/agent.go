@@ -23,7 +23,7 @@ import (
 
 // Version is the release of the app. It is a variable so a test can build
 // an "older" app.
-var Version = "0.7.0"
+var Version = "0.7.1"
 
 // Agent runs one worker per linked project and carries out what the user
 // asks for on the status page.
@@ -499,6 +499,31 @@ func (a *Agent) Login(server, token string) error {
 	}
 	for id := range a.runners {
 		a.stopRunner(id)
+	}
+	// Projects linked here that this session does not have belong to an
+	// earlier session: unlink them, so a new session starts clean. Their
+	// folders and files stay where they are. Only when the list is known.
+	if list, err := cl.Projects(); err == nil {
+		here := map[string]bool{}
+		for _, p := range list {
+			here[p.ID] = true
+		}
+		var kept []config.Link
+		for _, link := range a.cfg.Links {
+			if here[link.ProjectID] {
+				kept = append(kept, link)
+			} else {
+				a.logf("info", "%s is not in this session, so it is no longer synced here; its files stay in %s", link.Name, link.Folder)
+			}
+		}
+		a.cfg.Links = kept
+		var skipped []string
+		for _, id := range a.cfg.Skipped {
+			if here[id] {
+				skipped = append(skipped, id)
+			}
+		}
+		a.cfg.Skipped = skipped
 	}
 	a.cfg.Server, a.cfg.Token, a.cfg.User, a.cfg.UserID, a.cfg.Device = server, token, me.Name, me.ID, device
 	if err := a.cfg.Save(); err != nil {

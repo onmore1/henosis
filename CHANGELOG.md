@@ -2,6 +2,27 @@
 
 The release workflow takes the notes for a version from the section below.
 
+## 0.7.1
+
+- **A new session starts clean.** "Start a new session" is now the main
+  button on the start screen (and what Enter does). The session already on
+  the computer is listed underneath, with who is in it, if you want to
+  continue it instead.
+- **Joining a session starts clean too.** Projects from a session you were in
+  before no longer follow you in as "No longer available"; their folders and
+  files stay where they are.
+- **Samples travel by themselves.** A sample a project uses from elsewhere on
+  your computer (a pack in Downloads, say) is copied next to the project file,
+  where FL Studio looks for it, and sent with the project. No button to
+  remember. A sample that is only on your friend's computer shows as "not on
+  this computer yet" and arrives once Hénōsis runs there.
+- **A screen while connecting** says what is happening: looking for your
+  friend's computer, going through the relay, signing you in.
+- When you start a session, the window says what Windows' network question
+  means. Allow is best; Cancel still works, through the relay.
+- If Hénōsis ever crashes, the reason is written to
+  `%AppData%\Henosis\crash.log`.
+
 ## 0.7.0
 
 Download **Henosis.exe** and double-click it.

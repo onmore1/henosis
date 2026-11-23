@@ -82,7 +82,8 @@ type Status struct {
 	NewerOnServer   bool     `json:"newer_on_server"`
 	ConfirmDelete   string   `json:"confirm_delete,omitempty"`
 	Conflicts       []string `json:"conflicts"`
-	OutsideSamples  []string `json:"outside_samples"`
+	OutsideSamples  []string `json:"outside_samples"` // on this computer, outside the folder, and not copied in (a name clash)
+	MissingSamples  []string `json:"missing_samples"` // used by the project, not on this computer at all
 	RetentionDays   int      `json:"retention_days"`
 	LastSync        string   `json:"last_sync,omitempty"`
 	LastActivity    string   `json:"last_activity,omitempty"`
@@ -276,6 +277,15 @@ func (w *Worker) tick() {
 	quiet := !view.Saving && !view.Unstable && now.Sub(w.changedAt) >= w.timing.Quiet
 	if quiet {
 		w.refreshFLPInfo()
+		// A sample the project uses from elsewhere on this computer (a
+		// sample pack in Downloads, say) is copied next to the project
+		// file, where FL Studio looks for it, so it travels with the
+		// project. Nothing is overwritten; the copies are synced as usual.
+		if result, err := w.collect(); err != nil {
+			w.log("error", "%s: could not copy a sample into the project: %v", w.Link.Name, err)
+		} else if len(result.Copied) > 0 {
+			w.log("info", "%s: copied %d sample(s) into the project so your friends get them: %s", w.Link.Name, len(result.Copied), strings.Join(result.Copied, ", "))
+		}
 	}
 
 	// 2. FL Studio. If it cannot be observed, the last answer stands.
@@ -600,9 +610,12 @@ func (w *Worker) outsideSamples() []outsideSample {
 				continue
 			}
 			// FL Studio looks for a missing sample next to the project
-			// file, so a copy there is as good as the original.
-			if _, err := os.Stat(filepath.Join(dir, baseName(sample))); err == nil {
-				continue
+			// file, so a copy there is as good as the original, unless
+			// the file there is a different sample with the same name.
+			if there, err := os.Stat(filepath.Join(dir, baseName(sample))); err == nil {
+				if orig, err := os.Stat(sample); err != nil || orig.Size() == there.Size() {
+					continue
+				}
 			}
 			seen[strings.ToLower(sample)] = true
 			out = append(out, outsideSample{Path: sample, FLPDir: dir})
@@ -617,7 +630,7 @@ func (w *Worker) publish() {
 	st := Status{
 		ProjectID: w.Link.ProjectID, Name: w.Link.Name, Folder: w.Link.Folder,
 		Online: w.online, OpenInFL: w.open, HoldingLock: w.holding, Yielded: w.yielded,
-		Conflicts: append([]string{}, w.view.Conflicts...), OutsideSamples: []string{}, Members: []string{},
+		Conflicts: append([]string{}, w.view.Conflicts...), OutsideSamples: []string{}, MissingSamples: []string{}, Members: []string{},
 		ConfirmDelete: w.needsConfirm, LastActivity: w.lastActivity, NextNote: w.nextNote, Gone: w.gone,
 		AutoSend: w.autoSend, AutoUpdate: w.autoUpdate,
 	}
@@ -640,7 +653,11 @@ func (w *Worker) publish() {
 	}
 	st.UnsentChanges = w.seen && !w.view.Missing && w.dirty()
 	for _, sample := range w.outsideSamples() {
-		st.OutsideSamples = append(st.OutsideSamples, sample.Path)
+		if info, err := os.Stat(sample.Path); err == nil && !info.IsDir() {
+			st.OutsideSamples = append(st.OutsideSamples, sample.Path)
+		} else {
+			st.MissingSamples = append(st.MissingSamples, baseName(sample.Path))
+		}
 	}
 	st.State, st.Headline, st.Detail = w.sentence(st)
 	if st.Headline != w.lastHeadline {
@@ -912,15 +929,22 @@ func (w *Worker) CollectSamples() (CollectResult, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	defer w.publish()
-	var result CollectResult
 	w.view = viewFolder(w.Link.Folder)
 	if w.view.Missing {
-		return result, errors.New("the project folder is missing")
+		return CollectResult{}, errors.New("the project folder is missing")
 	}
 	if w.view.Saving {
-		return result, errors.New("FL Studio is saving; try again in a moment")
+		return CollectResult{}, errors.New("FL Studio is saving; try again in a moment")
 	}
 	w.refreshFLPInfo()
+	return w.collect()
+}
+
+// collect copies every outside sample that is on this computer into the
+// project folder. The caller holds w.mu and has made sure FL Studio is not
+// in the middle of a save.
+func (w *Worker) collect() (CollectResult, error) {
+	var result CollectResult
 	for _, sample := range w.outsideSamples() {
 		name := baseName(sample.Path)
 		target := filepath.Join(sample.FLPDir, name)
