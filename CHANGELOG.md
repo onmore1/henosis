@@ -2,6 +2,13 @@
 
 The release workflow takes the notes for a version from the section below.
 
+## 0.7.2
+
+- **Samples are found by name**, like FL Studio does, when the path stored
+  in the project no longer matches the folders on disk (a pack re-extracted
+  or renamed after you used it). Such a sample used to count as missing, so
+  it never travelled with the project.
+
 ## 0.7.1
 
 - **A new session starts clean.** "Start a new session" is now the main

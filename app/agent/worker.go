@@ -123,6 +123,7 @@ type Worker struct {
 	synced    bool // syncedSum is the folder as it was last in step with the server
 	lastFull  time.Time
 	flps      map[string]flpEntry
+	finder    sampleFinder
 
 	project    core.ProjectView
 	known      bool // project holds a real answer from the server
@@ -589,6 +590,7 @@ func baseName(path string) string {
 type outsideSample struct {
 	Path   string // as stored in the project file
 	FLPDir string // folder of the project file, on this computer
+	Source string // where it is on this computer: Path, or found by name; "" if nowhere
 }
 
 func (w *Worker) outsideSamples() []outsideSample {
@@ -612,13 +614,14 @@ func (w *Worker) outsideSamples() []outsideSample {
 			// FL Studio looks for a missing sample next to the project
 			// file, so a copy there is as good as the original, unless
 			// the file there is a different sample with the same name.
+			source := w.finder.find(sample)
 			if there, err := os.Stat(filepath.Join(dir, baseName(sample))); err == nil {
-				if orig, err := os.Stat(sample); err != nil || orig.Size() == there.Size() {
+				if orig, err := os.Stat(source); source == "" || err != nil || orig.Size() == there.Size() {
 					continue
 				}
 			}
 			seen[strings.ToLower(sample)] = true
-			out = append(out, outsideSample{Path: sample, FLPDir: dir})
+			out = append(out, outsideSample{Path: sample, FLPDir: dir, Source: source})
 		}
 	}
 	return out
@@ -653,7 +656,7 @@ func (w *Worker) publish() {
 	}
 	st.UnsentChanges = w.seen && !w.view.Missing && w.dirty()
 	for _, sample := range w.outsideSamples() {
-		if info, err := os.Stat(sample.Path); err == nil && !info.IsDir() {
+		if sample.Source != "" {
 			st.OutsideSamples = append(st.OutsideSamples, sample.Path)
 		} else {
 			st.MissingSamples = append(st.MissingSamples, baseName(sample.Path))
@@ -948,7 +951,7 @@ func (w *Worker) collect() (CollectResult, error) {
 	for _, sample := range w.outsideSamples() {
 		name := baseName(sample.Path)
 		target := filepath.Join(sample.FLPDir, name)
-		source, err := os.Stat(sample.Path)
+		source, err := os.Stat(sample.Source)
 		if err != nil || source.IsDir() {
 			result.NotFound = append(result.NotFound, sample.Path)
 			continue
@@ -959,7 +962,7 @@ func (w *Worker) collect() (CollectResult, error) {
 			result.Clashes = append(result.Clashes, sample.Path)
 			continue
 		}
-		if err := copyInto(sample.Path, target); err != nil {
+		if err := copyInto(sample.Source, target); err != nil {
 			return result, fmt.Errorf("copying %s: %w", name, err)
 		}
 		result.Copied = append(result.Copied, name)

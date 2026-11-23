@@ -846,3 +846,22 @@ func TestStopGivesTheLockBack(t *testing.T) {
 		t.Fatal("stopping the app left the lock behind")
 	}
 }
+
+// The project file names a sample folder that was renamed afterwards: the
+// sample is found by its name and travels with the project.
+func TestRenamedSampleFolderStillTravels(t *testing.T) {
+	b := newBench(t, true)
+	pack := filepath.Join(b.dir, "downloads", "Apoc Krysis Vol 1-4")
+	real := filepath.Join(pack, "Drum Kit Vol.IV", "Perc & Hi-Hats", "Mystic Stylez Open Hat.wav")
+	os.MkdirAll(filepath.Dir(real), 0o755)
+	os.WriteFile(real, []byte("OPEN HAT"), 0o644)
+	stored := filepath.Join(pack, "Drum Kit Vol . IV", "Perc Hi Hats", "Mystic Stylez Open Hat.wav")
+	b.write(b.ann, "My Song.flp", string(flptest.Project("", []string{stored}, "")))
+	b.pass(12)
+	if read(b.ann, "Mystic Stylez Open Hat.wav") != "OPEN HAT" || read(b.bob, "Mystic Stylez Open Hat.wav") != "OPEN HAT" {
+		t.Fatalf("the hat did not travel: ann %v, bob %v", tree(b.ann.folder), tree(b.bob.folder))
+	}
+	if st := b.ann.w.Status(); len(st.MissingSamples)+len(st.OutsideSamples) != 0 {
+		t.Fatalf("still reported: missing %q, outside %q", st.MissingSamples, st.OutsideSamples)
+	}
+}
