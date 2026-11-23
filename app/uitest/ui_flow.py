@@ -86,12 +86,13 @@ try:
         # --- two clicks to a session ---------------------------------------
         slow_type(ann, "#myName", "vadym", "ann ")
         ann.click("#startSession")
-        ann.wait_for_selector("#sessionCode", timeout=15000)
-        code = ann.inner_text("#sessionCode")
+        ann.wait_for_selector("#tCode", timeout=15000)
+        code = ann.text_content("#sessionCode")
         check("a session code is shown", code.startswith("HEN") and len(code) > 30)
+        check("the bar shows the start of the code", ann.inner_text("#tCode").startswith(code[:8]))
         check("ann is signed in under her name", "vadym on" in ann.inner_text("#who"))
         time.sleep(4.5)
-        check("the code stays the same across refreshes", ann.inner_text("#sessionCode") == code)
+        check("the code stays the same across refreshes", ann.text_content("#sessionCode") == code)
 
         # --- adding a project: drag it onto the window ----------------------
         ann.evaluate("""([name, size]) => {
@@ -101,7 +102,13 @@ try:
         }""", ["Night Drive.flp", os.path.getsize(os.path.join(song, "Night Drive.flp"))])
         wait("the project to sync", lambda: "Up to date" in ann.inner_text("#projects"))
         check("the dragged project was found on disk and added", "Night Drive" in ann.inner_text("#projects"))
-        check("it was linked where it actually lives", song in ann.inner_text("#projects"))
+        check("it was linked where it actually lives", song in ann.inner_html("#projects"))
+        check("a card leads with opening it in FL Studio", ann.locator('#projects button[data-act="open-project"]').count() == 1)
+        ann.click("#projects details.more summary")
+        time.sleep(4.5)
+        check("the ⋯ menu stays open across refreshes", ann.is_visible('#projects button[data-act="open-folder"]'))
+        ann.click("h1")
+        check("a press outside closes the menu", not ann.is_visible('#projects button[data-act="open-folder"]'))
 
         # Dragging something that is not a project says so and adds nothing.
         before = ann.inner_text("#projects")
@@ -110,14 +117,14 @@ try:
           data.items.add(new File(["x"], "holiday.jpg"));
           document.dispatchEvent(new DragEvent("drop", {dataTransfer: data, bubbles: true, cancelable: true}));
         }""")
-        wait("the refusal in the console", lambda: "drop failed" in ann.inner_text("#lines"))
+        wait("the refusal in the console", lambda: "drop failed" in ann.text_content("#lines"))
         check("nothing was added for a random file", ann.inner_text("#projects") == before)
 
         # The path box still works for anyone who prefers typing.
         ann.click("details.paste summary")
         slow_type(ann, "#newFolder", os.path.join(root, "does not exist"), "ann ")
         ann.click("#create")
-        wait("the error line in the console", lambda: "create failed" in ann.inner_text("#lines"))
+        wait("the error line in the console", lambda: "create failed" in ann.text_content("#lines"))
         check("a failed press keeps the typed folder", ann.input_value("#newFolder") != "")
         check("the example folder shows its backslashes", "C:\\Users\\you\\Documents" in ann.get_attribute("#newFolder", "placeholder"))
         ann.fill("#newFolder", "")
@@ -127,7 +134,7 @@ try:
         slow_type(bob, "#myName", "max", "bob ")
         bob.fill("#joinCode", "not a code")
         bob.click("#joinSession")
-        wait("the refusal of a wrong code", lambda: "connect failed" in bob.inner_text("#lines"))
+        wait("the refusal of a wrong code", lambda: "connect failed" in bob.text_content("#lines"))
         check("a wrong code does not sign the friend in", bob.is_visible("#myName"))
         bob.fill("#joinCode", "  " + code.lower() + "\n")
         bob.click("#joinSession")
@@ -136,7 +143,9 @@ try:
         bob_song = os.path.join(bob_home, "Documents", "Henosis", "Night Drive")
         wait("the project arriving at the friend without any click",
              file_is(os.path.join(bob_song, "Night Drive.flp"), open(os.path.join(song, "Night Drive.flp"), "rb").read()))
-        wait("both names listed in the session", lambda: "max" in ann.inner_text("#people") and "vadym" in ann.inner_text("#people"))
+        wait("the friend listed in the host's bar", lambda: "you, max" in ann.inner_text("#tPeople"))
+        wait("the host listed in the friend's bar", lambda: "vadym" in bob.inner_text("#tPeople"), 30)
+        check("the friend's bar says how it is connected", "Directly" in bob.inner_text("#tLink"))
 
         # --- the friend's own project travels back -------------------------
         bob_own = os.path.join(bob_home, "Documents", "Image-Line", "FL Studio", "Projects", "max beat")
@@ -178,7 +187,11 @@ try:
         time.sleep(4.5)
         check("the history stays put across refreshes", "drop is fire" in ann.inner_text("#versions"))
 
-        # --- the console can be made smaller and stays that way -------------
+        # --- the console: a strip until opened, then resizable --------------
+        check("the console starts as a closed strip", not ann.is_visible("#lines"))
+        check("the strip shows the latest line", ann.inner_text("#lastLine") != "")
+        ann.click("#toggleLog")
+        check("the console opens", ann.is_visible("#lines"))
         before = ann.evaluate("document.querySelector('#lines').getBoundingClientRect().height")
         grip = ann.locator("#grip").bounding_box()
         ann.mouse.move(grip["x"] + grip["width"] / 2, grip["y"] + 3)
@@ -198,6 +211,7 @@ try:
         ann_copy = os.path.join(ann_home, "Documents", "Henosis", "max beat", "max beat.flp")
         check("the friend's project is on both computers", os.path.exists(bob_project) and os.path.exists(ann_copy))
         check("only its owner may remove it", ann.locator('[data-select]:has-text("max beat") button[data-act="delete"]').count() == 0)
+        bob.click('#projects [data-select]:has-text("max beat") details.more summary')
         bob.click('#projects [data-select]:has-text("max beat") button[data-act="delete"]')
         wait("the project disappearing at the friend's", lambda: "max beat" not in bob.inner_text("#projects"))
         wait("ann being told it is gone", lambda: "No longer available" in ann.inner_text("#projects"))
@@ -210,19 +224,20 @@ try:
         check("ann's copy of the files is still there", os.path.exists(ann_copy))
 
         # --- the debug console ---------------------------------------------
-        console = ann.inner_text("#lines")
+        console = ann.text_content("#lines")
         check("the console shows what was pressed", "> host/start" in console and "> create folder=" in console)
         check("the console shows what the app did", "Night Drive: Uploaded your changes" in console)
-        check("the friend's console shows the connection", "connect: found the session at" in bob.inner_text("#lines"))
+        check("the friend's console shows the connection", "connect: found the session at" in bob.text_content("#lines"))
         ann.check("#detail")
         time.sleep(4.5)
         check("the details switch stays on across refreshes", ann.is_checked("#detail"))
-        check("details show the requests", "POST /v1/projects" in ann.inner_text("#lines"))
-        both = ann.inner_text("#lines") + bob.inner_text("#lines")
+        check("details show the requests", "POST /v1/projects" in ann.text_content("#lines"))
+        both = ann.text_content("#lines") + bob.text_content("#lines")
         check("no token or session code in the consoles", "hn_" not in both and code[:20] not in both.upper())
         ann.click("#toggleLog")
-        check("the console can be hidden", not ann.is_visible("#lines"))
-        ann.click("#toggleLog")
+        check("the console can be closed again", not ann.is_visible("#lines"))
+        ann.click("#consoleBar b")
+        check("clicking the strip opens it", ann.is_visible("#lines"))
 
         # --- a change on disk needs no click --------------------------------
         open(os.path.join(song, "kick.wav"), "wb").write(b"kick")

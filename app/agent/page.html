@@ -107,17 +107,97 @@ h2 .hint{float:right;text-transform:none;letter-spacing:0;font-weight:400}
 header{align-items:center}
 body{transition:background .15s,color .15s}
 
+/* --- 0.7 layout ------------------------------------------------------- */
+[data-theme="dark"],:root{--panel:#0e0f13;--led-off:#2a2c35}
+[data-theme="light"]{--panel:#E6EDF5;--led-off:#C9D3DE}
+[data-theme="teal"]{--panel:#232529;--led-off:#45484f}
+header{margin-bottom:18px}
+header .hdr-right{margin-left:auto;display:flex;align-items:center;gap:14px}
+header .who{margin:0}
+header .themes{margin:0}
+h2{text-transform:none;letter-spacing:0;font-size:15px;font-weight:600;color:var(--text);margin:26px 0 10px}
+h2 .hint{color:var(--dim);font-size:13px}
+
+/* LEDs: the status light of a project or of the whole session, like a
+   mixer channel's. Lit ones glow; a syncing one blinks. */
+.led{display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--led-off);flex:none}
+.led.ok{background:var(--ok);box-shadow:0 0 7px var(--ok)}
+.led.accent{background:var(--accent);box-shadow:0 0 7px var(--accent)}
+.led.warn{background:var(--warn);box-shadow:0 0 7px var(--warn)}
+.led.bad{background:var(--bad);box-shadow:0 0 7px var(--bad)}
+.led.blue{background:var(--blue);box-shadow:0 0 7px var(--blue);animation:pulse 1.2s infinite}
+@media (prefers-reduced-motion:reduce){.led.blue,.syncing .dot{animation:none}}
+
+/* The transport bar: the session at a glance, across the top. */
+.transport{position:relative;display:flex;flex-wrap:wrap;align-items:stretch;background:var(--panel);border:1px solid var(--line);border-radius:12px;margin-bottom:18px;box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
+.transport .seg{display:flex;align-items:center;gap:9px;padding:11px 16px;border-right:1px solid var(--line);font-size:13.5px;min-height:52px}
+.transport .seg:last-child{border-right:0}
+.transport .seg small{display:block;font-size:11.5px;color:var(--dim);line-height:1.2}
+.transport .seg b{font-weight:600;color:var(--text);display:block;line-height:1.25}
+.transport .grow{margin-left:auto}
+.transport code{font:600 13px Consolas,"Cascadia Mono",monospace;color:var(--accent);letter-spacing:.5px}
+.transport details{margin:0;color:var(--text)}
+.transport details>summary{list-style:none;cursor:pointer;font-size:13.5px;color:var(--dim);padding:4px 2px}
+.transport details>summary::-webkit-details-marker{display:none}
+.transport details>summary:hover,.transport details[open]>summary{color:var(--text)}
+.transport .panel{position:absolute;right:-1px;top:calc(100% + 6px);width:min(560px,calc(100vw - 40px));background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;z-index:50;box-shadow:var(--shadow);color:var(--dim);font-size:13.5px}
+
+/* Project cards: status first, one main action, the rest in a menu. */
+.card.pick{padding:14px 18px}
+.card .top{flex-wrap:wrap;row-gap:8px}
+.card .top .led{margin-right:2px}
+.card .top .name{font-size:17px}
+.card .top .headline{margin-left:0;font-weight:500;color:var(--dim);font-size:13.5px;text-align:left}
+.card .top .acts-main{margin:0 0 0 auto}
+.card .sub{display:flex;flex-wrap:wrap;align-items:center;gap:4px 18px;margin:8px 0 0 22px;color:var(--dim);font-size:12.5px}
+.card .sub .folder{margin:0;font-size:12.5px}
+.card .sub a{color:var(--dim)}
+.card .toggles{margin:0;gap:12px}
+.card .detail,.card .note,.card .row{margin-left:22px}
+.synced .headline{color:var(--ok)!important}
+.problem .headline{color:var(--bad)!important}
+.waiting .headline,.attention .headline{color:var(--warn)!important}
+
+.layout>div>h2:first-child{margin-top:4px}
+.addcard{margin-top:6px;padding:14px 18px}
+.addcard #drop{display:flex;align-items:center;gap:14px;flex-wrap:wrap;text-align:left;padding:14px 16px;border-width:1.5px}
+.addcard #drop .help{margin:0}
+.addcard #addProject{border-color:var(--accent);color:var(--accent);font-weight:600}
+
+/* The ⋯ menu on a card. */
+details.more{position:relative;margin:0;color:var(--text)}
+details.more>summary{list-style:none;cursor:pointer;width:32px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:8px;background:var(--btn-bg);font-size:16px;line-height:1;letter-spacing:1px}
+details.more>summary::-webkit-details-marker{display:none}
+details.more>summary:hover,details.more[open]>summary{border-color:var(--dim)}
+details.more .menu{position:absolute;right:0;top:calc(100% + 6px);min-width:220px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px;z-index:40;box-shadow:var(--shadow);display:flex;flex-direction:column}
+details.more .menu button{background:none;border:0;text-align:left;padding:8px 10px;border-radius:6px;font-size:13.5px}
+details.more .menu button:hover{background:var(--btn-bg)}
+details.more .menu hr{border:0;border-top:1px solid var(--line);margin:4px 2px}
+details.more .menu .danger{color:var(--bad)}
+
+/* The console: a status strip until you open it. */
+#console .bar{cursor:pointer;min-height:38px}
+#console .bar button,#console .bar label{cursor:pointer}
+#lastLine{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:12.5px Consolas,"Cascadia Mono",monospace;color:var(--dim)}
+#console:not(.closed) #lastLine{visibility:hidden}
+#console.closed #detail,#console.closed #copyLog,#console.closed #clearLog,#console.closed label{display:none}
+body:has(#console.closed){padding-bottom:64px}
+body:has(#console.closed) #toast{bottom:58px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media(max-width:1020px){.transport .grow{margin-left:0;flex:1}}
+@media(max-width:700px){.transport .seg{border-right:0;border-bottom:1px solid var(--line);width:100%}.transport .grow{margin-left:0}.card .top .acts-main{margin-left:22px}}
+
 </style>
 </head>
 <body>
 <main>
-<header><svg class="logo" viewBox="0 0 100 100"><polygon fill="currentColor" points="36.3,5.1 63.7,5.1 59.4,37.1 88.5,23.0 97.0,49.2 65.2,54.9 87.5,78.3 65.3,94.4 50.0,66.0 34.7,94.4 12.5,78.3 34.8,54.9 3.0,49.2 11.5,23.0 40.6,37.1"/></svg><h1>Hén<span>ō</span>sis</h1><div class="themes" id="themes" title="Pick a color theme"><button data-set="dark" title="Dark"></button><button data-set="light" title="Light"></button><button data-set="teal" title="Teal"></button></div><div class="who" id="who"></div></header>
+<header><svg class="logo" viewBox="0 0 100 100"><polygon fill="currentColor" points="36.3,5.1 63.7,5.1 59.4,37.1 88.5,23.0 97.0,49.2 65.2,54.9 87.5,78.3 65.3,94.4 50.0,66.0 34.7,94.4 12.5,78.3 34.8,54.9 3.0,49.2 11.5,23.0 40.6,37.1"/></svg><h1>Hén<span>ō</span>sis</h1><div class="hdr-right"><div class="who" id="who"></div><div class="themes" id="themes" title="Color theme"><button data-set="dark" title="Dark theme" aria-label="Dark theme"></button><button data-set="light" title="Light theme" aria-label="Light theme"></button><button data-set="teal" title="Teal theme" aria-label="Teal theme"></button></div></div></header>
 <div id="app"></div>
 </main>
 <div id="toast"></div>
-<div id="console"><div id="grip" title="Drag to make the console taller or shorter"></div><div class="bar"><b>Debug console</b><span id="count"></span>
+<div id="console" class="closed"><div id="grip" title="Drag to make the console taller or shorter"></div><div class="bar" id="consoleBar" title="What the app is doing"><b>Console</b><span id="count"></span><span id="lastLine"></span>
 <label><input type="checkbox" id="detail"> show details</label>
-<button id="copyLog">Copy</button><button id="clearLog">Clear</button><button id="toggleLog">Hide</button></div><div id="lines"></div></div>
+<button id="copyLog">Copy</button><button id="clearLog">Clear</button><button id="toggleLog">Open</button></div><div id="lines"></div></div>
 <script>
 "use strict";
 // Theme — read the saved choice and apply it before anything renders.
@@ -168,6 +248,18 @@ let skeleton = "";
 const drawn = {};
 function put(id, html) { const el = document.getElementById(id); if (el && drawn[id] !== html) { el.innerHTML = html; drawn[id] = html; } }
 
+// One line and one light for all projects together: the worst state wins.
+function syncSummary(projects) {
+  if (!projects.length) return {led: "", text: "No projects yet"};
+  const has = (st) => projects.some((p) => p.state === st);
+  if (has("problem")) return {led: "bad", text: "Needs a look"};
+  if (has("attention") || has("waiting")) return {led: "warn", text: "Waiting on something"};
+  if (has("syncing")) return {led: "blue", text: "Syncing"};
+  if (has("offline")) return {led: "", text: "Offline"};
+  if (has("editing")) return {led: "accent", text: "Editing in FL Studio"};
+  return {led: "ok", text: projects.length === 1 ? "Up to date" : `All ${projects.length} up to date`};
+}
+
 function render() {
   const mode = !state.signed_in ? "out" : state.host.running ? "hosting" : "in";
   if (mode !== skeleton) {
@@ -180,15 +272,26 @@ function render() {
   const h = state.host;
   if (mode === "hosting") {
     put("sessionCode", esc(h.code));
-    put("people", `In the session: <b style="color:var(--text)">${h.accounts.map(esc).join(", ")}</b>`);
+    put("tCode", esc(h.code.length > 16 ? h.code.slice(0, 8) + "…" + h.code.slice(-6) : h.code));
+    const others = h.accounts.filter((n) => n !== state.user);
+    put("tPeople", `<div><small>In the session</small><b>${others.length ? ["you", ...others].map(esc).join(", ") : "Just you so far"}</b></div>`);
+    put("tLink", `<div><small>Hosting</small><b>${h.relay ? "Reachable from anywhere" : "Same network or Tailscale"}</b></div>`);
     put("hostAddr", (h.addresses.length ? h.addresses.map((a) => `<div>${esc(a)}</div>`).join("") : "No network connection found.") + (h.extra ? `<div>extra: ${esc(h.extra)}</div>` : ""));
     put("hostData", `Projects are stored in ${esc(h.data_dir)}`);
     const relayIn = document.getElementById("relayUrl");
     if (relayIn && relayIn !== document.activeElement && relayIn.value !== (h.relay || "")) relayIn.value = h.relay || "";
     put("relayState", h.relay ? `Relay on: friends who cannot reach you directly will be paired through <b style="color:var(--text)">${esc(h.relay)}</b>.` : "Relay off. A friend needs to be on the same network, both of you on Tailscale, or an address added by hand.");
   } else {
-    put("joined", `You are in the session at ${esc(state.server)}.${h.problem ? " Hosting on this computer failed: " + esc(h.problem) + "." : ""}`);
+    const viaRelay = String(state.server).startsWith("relay://");
+    const people = [...new Set(state.projects.flatMap((p) => p.members || []))].filter((n) => n !== state.user);
+    put("tPeople", `<div><small>In the session</small><b>${people.length ? "you, " + people.map(esc).join(", ") : "you"}</b></div>`);
+    put("tLink", `<div><small>Connected</small><b>${viaRelay ? "Through the relay" : "Directly"}</b></div>`);
+    put("joined", h.problem ? `<div class="note" style="margin:0 0 14px">Hosting on this computer failed: ${esc(h.problem)}.</div>` : "");
   }
+  const sync = syncSummary(state.projects);
+  const led = document.getElementById("tLed");
+  if (led) led.className = "led " + sync.led;
+  put("tSync", `<div><small>Sync</small><b>${esc(sync.text)}</b></div>`);
   put("projects", cards());
   put("projectsHint", state.projects.length > 1 ? "click one to see its history" : "");
   put("unlinked", state.unlinked.length ? `<h2>In the session, not on this computer<span class="hint">your friend added these, or you stopped syncing them</span></h2>` + state.unlinked.map((p) => `<div class="card"><div class="top"><div class="name">${esc(p.name)}</div><div class="headline"><button data-link="${p.id}">Download it</button></div></div></div>`).join("") : "");
@@ -216,29 +319,39 @@ function signedOut() {
 }
 
 function signedIn(hosting) {
+  // The transport bar: sync state, who is in, how you are connected, and the
+  // invite code. Its parts are filled in by render(); the panel with fields
+  // is built once, so typing in it is never interrupted.
   const session = hosting
-    ? `<div class="card"><div class="top"><div class="name">Your session code</div><div class="headline"><button class="main" id="copyCode">Copy code</button></div></div>
-      <div class="codebox" id="sessionCode"></div>
-      <div class="help" style="margin:10px 0 0">Send this to your friend. They open Hénōsis, type their name, paste the code and press Join. Nothing else to set up.</div>
-      <div class="meta" style="margin-left:0" id="people"></div>
-      <details><summary>It does not connect? Addresses and options</summary>
-        <div style="margin-top:8px">The code works when your friend is on the same Wi-Fi, or when you both run Tailscale. It carries these addresses of this computer:</div>
+    ? `<div class="transport">
+      <div class="seg"><i class="led" id="tLed"></i><span id="tSync"></span></div>
+      <div class="seg" id="tPeople"></div>
+      <div class="seg" id="tLink"></div>
+      <div class="seg grow"><code id="tCode" title="Your invite code"></code><button class="main" id="copyCode">Copy invite code</button>${tip("Send this code to your friend. They open Hénōsis, type their name, paste it and press Join. Nothing else to set up.")}</div>
+      <div class="seg"><details id="sessionMore"><summary>Session ▾</summary><div class="panel">
+        <label style="margin-top:0">Invite code</label>
+        <div class="codebox" id="sessionCode" style="margin-top:0"></div>
+        <div style="margin-top:12px">Your friend reaches you on one of these addresses (same Wi-Fi or Tailscale), or through the relay when none of them works:</div>
         <div class="meta" style="margin:6px 0 0;font-family:Consolas,monospace" id="hostAddr"></div>
         <label>Add an address by hand (a public IP or a domain, if you forwarded port 8787 on your router)</label>
         <div class="inline"><input id="extraAddr" placeholder="203.0.113.9" autocomplete="off"><button id="saveExtra">Save</button></div>
-        <div class="meta" style="margin-left:0" id="hostData"></div>
-        <label style="margin-top:14px">Relay URL (optional — lets friends connect from anywhere, without Tailscale)</label>
-        <div class="inline"><input id="relayUrl" placeholder="https://henosis-relay.your-account.workers.dev" autocomplete="off"><button id="saveRelay">Save</button></div>
+        <label style="margin-top:14px">Relay address (lets friends connect from anywhere)</label>
+        <div class="inline"><input id="relayUrl" placeholder="https://henosis-relay.yourname.workers.dev" autocomplete="off"><button id="saveRelay">Save</button></div>
         <div class="meta" style="margin-left:0" id="relayState"></div>
-        <div class="row" style="margin-left:0"><button class="quiet" id="newCode" title="The old code stops working for new friends. Everyone already connected stays.">Make a new code</button><button class="quiet" id="hostStop" title="Friends cannot sync until you start it again. Nothing is deleted.">Stop the session</button></div></details></div>`
-    : `<div class="card"><div class="detail" style="margin-left:0" id="joined"></div></div>`;
-  return `<div class="layout"><div>
-    ${session}
+        <div class="meta" style="margin-left:0" id="hostData"></div>
+        <div class="row" style="margin-left:0"><button class="quiet" id="newCode" title="The old code stops working for new friends. Everyone already connected stays.">Make a new code</button><button class="quiet" id="hostStop" title="Friends cannot sync until you start it again. Nothing is deleted.">Stop the session</button></div>
+      </div></details></div></div>`
+    : `<div class="transport">
+      <div class="seg"><i class="led" id="tLed"></i><span id="tSync"></span></div>
+      <div class="seg" id="tPeople"></div>
+      <div class="seg grow" id="tLink"></div></div>
+      <div id="joined"></div>`;
+  return `${session}<div class="layout"><div>
     <h2>Projects<span class="hint" id="projectsHint"></span></h2><div id="projects"></div><div id="unlinked"></div>
-    <h2>Add a project</h2><div class="card">
+    <div class="card addcard">
       <div id="drop">
-        <div class="row" style="margin:0 0 10px;justify-content:center"><button class="main big" id="addProject" style="width:auto">Add a project</button></div>
-        <div class="help" style="margin:0">Pick the folder that holds the <b>.flp</b>, or drag it onto this window from File Explorer.</div>
+        <button id="addProject">+ Add a project</button>
+        <span class="help">Pick the folder that holds the <b>.flp</b>, or drag it onto this window from File Explorer.</span>
       </div>
       <div id="suggest"></div>
       <details class="paste"><summary>Paste a path instead</summary>
@@ -258,6 +371,15 @@ function signedIn(hosting) {
     </div></div></div></div>`;
 }
 
+const ledFor = (st) => ({synced: "ok", editing: "accent", syncing: "blue", waiting: "warn", attention: "warn", problem: "bad"}[st] || "");
+// The last two folders of a path, so a card shows where it lives without a
+// line of C:\Users\…; the full path is in the tooltip.
+function shortFolder(path) {
+  const parts = String(path).split(/[\\/]/).filter(Boolean);
+  return parts.length > 2 ? "…" + (String(path).includes("\\") ? "\\" : "/") + parts.slice(-2).join(String(path).includes("\\") ? "\\" : "/") : path;
+}
+let openMenu = null;
+
 function cards() {
   if (!state.projects.length) return `<div class="card"><div class="detail" style="margin-left:0">No projects yet. Add one below${state.host.running ? "" : ", or wait for your friend to add one"}.</div></div>`;
   return state.projects.map((p) => {
@@ -267,28 +389,34 @@ function cards() {
     if (p.yielded) b.push(`<button data-act="take" data-id="${p.project_id}">Take the project back</button>`);
     if (p.lock_holder && p.open_in_fl) b.push(`<button data-act="ask" data-id="${p.project_id}" title="${esc(p.lock_holder)} sees that you would like to edit.">Ask ${esc(p.lock_holder)} for it</button>`);
     if (p.lock_holder && p.role === "owner") b.push(`<button class="quiet" data-act="break" data-id="${p.project_id}" title="Only if their computer is gone." data-confirm="Take the project away from ${esc(p.lock_holder)}? Only do this if their computer is gone or crashed. Their unsent saves stay on their computer.">Break the lock</button>`);
-    // Main action buttons — always visible at top
+    const id = p.project_id;
+    // The one thing you usually want, then manual send/update only when the
+    // automatic one is off, then everything else in the ⋯ menu.
     const mainBtns = [];
-    if (!p.gone) mainBtns.push(`<button class="main" data-act="open-project" data-id="${p.project_id}">▶ Open project</button>${tip("Opens the .flp file in FL Studio so you can start working on it")}`);
-    mainBtns.push(`<button data-act="open-folder" data-id="${p.project_id}">📂 Open folder</button>${tip("Opens the project folder in Windows Explorer")}`);
-    if (!p.gone) {
-      mainBtns.push(`<button data-act="send" data-id="${p.project_id}">⬆ Send changes</button>${tip("Uploads your latest save to the session right now so your friend gets it")}`);
-      mainBtns.push(`<button data-act="update" data-id="${p.project_id}">⬇ Update now</button>${tip("Downloads the newest version your friend saved and replaces your local file")}`);
+    if (p.gone) mainBtns.push(`<button class="main" data-act="unlink" data-id="${id}" title="Your files stay on this computer." data-confirm="Take this project off the list?\n\nThe folder and its files stay on this computer, untouched.">Remove from the list</button>`);
+    else {
+      mainBtns.push(`<button class="main" data-act="open-project" data-id="${id}">▶ Open in FL Studio</button>`);
+      if (!p.auto_send) mainBtns.push(`<button data-act="send" data-id="${id}">⬆ Send changes</button>${tip("Auto-send is off, so your saves stay here until you press this. It uploads your latest save so your friend gets it.")}`);
+      if (!p.auto_update) mainBtns.push(`<button data-act="update" data-id="${id}">⬇ Update now</button>${tip("Auto-update is off, so your friend's saves wait until you press this. It downloads the newest version and replaces your local file.")}`);
     }
-    // Secondary actions
-    if (!p.gone) b.push(`<button class="quiet" data-act="sync" data-id="${p.project_id}" title="It syncs by itself; this just stops waiting.">Sync now</button>`);
-    if (p.gone) b.push(`<button class="main" data-act="unlink" data-id="${p.project_id}" title="Your files stay on this computer." data-confirm="Take this project off the list?\n\nThe folder and its files stay on this computer, untouched.">Remove from the list</button>`);
-    else b.push(`<button class="quiet" data-act="unlink" data-id="${p.project_id}" title="The folder and its files stay on this computer. The project stays in the session." data-confirm="Stop syncing this project on this computer?\n\nYour files stay where they are, and the project stays in the session${p.shared ? " for " + esc(p.members.filter((m) => m !== state.user).join(", ")) : ""}. You can download it again later.">Stop syncing here</button>`);
-    if (p.role === "owner" && !p.gone) b.push(`<button class="quiet danger" data-act="delete" data-id="${p.project_id}" title="Removes it for everyone. No files are deleted." data-confirm="Remove "${esc(p.name)}" from the session for everyone?\n\nIts version history and comments are deleted from the server. Nobody's files are touched: your folder and ${p.shared ? "your friend's folder stay" : "its folder stays"} exactly as ${p.shared ? "they are" : "it is"}.\n\nThis cannot be undone.">Remove from Hénōsis</button>`);
-    // Toggles for auto-send / auto-update
-    const toggles = !p.gone ? `<div class="toggles"><label><input type="checkbox" data-auto-send="${p.project_id}" ${p.auto_send ? "checked" : ""}> Auto-send</label>${tip("When on, every time you save in FL Studio your changes are uploaded automatically")}<label><input type="checkbox" data-auto-update="${p.project_id}" ${p.auto_update ? "checked" : ""}> Auto-update</label>${tip("When on, new versions from your friend are downloaded and applied without pressing anything")}</div>` : "";
+    const menu = [`<button data-act="open-folder" data-id="${id}">Show in File Explorer</button>`];
+    if (!p.gone) {
+      menu.push(`<button data-act="send" data-id="${id}">Send changes now</button>`, `<button data-act="update" data-id="${id}">Update now</button>`,
+        `<button data-act="sync" data-id="${id}" title="It syncs by itself; this just stops waiting.">Sync now</button>`, "<hr>",
+        `<button data-act="unlink" data-id="${id}" title="The folder and its files stay on this computer. The project stays in the session." data-confirm="Stop syncing this project on this computer?\n\nYour files stay where they are, and the project stays in the session${p.shared ? " for " + esc(p.members.filter((m) => m !== state.user).join(", ")) : ""}. You can download it again later.">Stop syncing here</button>`);
+      if (p.role === "owner") menu.push(`<button class="danger" data-act="delete" data-id="${id}" title="Removes it for everyone. No files are deleted." data-confirm="Remove &quot;${esc(p.name)}&quot; from the session for everyone?\n\nIts version history and comments are deleted from the server. Nobody's files are touched: your folder and ${p.shared ? "your friend's folder stay" : "its folder stays"} exactly as ${p.shared ? "they are" : "it is"}.\n\nThis cannot be undone.">Remove from Hénōsis</button>`);
+    }
+    mainBtns.push(`<details class="more" data-menu="${id}" ${openMenu === id ? "open" : ""}><summary aria-label="More actions" title="More actions">⋯</summary><div class="menu">${menu.join("")}</div></details>`);
+    const toggles = !p.gone ? `<span class="toggles"><label><input type="checkbox" data-auto-send="${id}" ${p.auto_send ? "checked" : ""}> Auto-send</label>${tip("When on, every save in FL Studio is uploaded by itself.")}<label><input type="checkbox" data-auto-update="${id}" ${p.auto_update ? "checked" : ""}> Auto-update</label>${tip("When on, your friend's new versions are downloaded and applied by themselves.")}</span>` : "";
     let notes = "";
     if (p.conflicts.length) notes += `<div class="note">Two people changed the same file. Both versions were kept; listen to them and delete the one you do not need:<ul>${p.conflicts.map((c) => `<li>${esc(c)}</li>`).join("")}</ul></div>`;
-    if (p.outside_samples.length) notes += `<div class="note">${p.outside_samples.length} sample${p.outside_samples.length > 1 ? "s are" : " is"} outside the project folder, so your friend will not get ${p.outside_samples.length > 1 ? "them" : "it"}:<ul>${p.outside_samples.slice(0, 6).map((c) => `<li>${esc(c)}</li>`).join("")}${p.outside_samples.length > 6 ? "<li>…</li>" : ""}</ul><div style="margin-top:8px"><button data-collect="${p.project_id}">Copy them into the project</button></div></div>`;
-    const people = p.shared ? "Shared with " + p.members.filter((m) => m !== state.user).map(esc).join(", ") : "Only you so far";
-    const meta = [people, p.last_sync ? "last change " + ago(p.last_sync) : "", `old versions kept ${p.retention_days || 3} days` + (p.role === "owner" ? ` <a href="#" data-lifetime="${p.project_id}" style="color:var(--dim)">change</a>` : "")].filter(Boolean).join(" · ");
-    return `<div class="card pick ${esc(p.state)} ${p.project_id === selected ? "sel" : ""}" data-select="${p.project_id}" title="Click to see this project's history"><div class="top"><div class="dot"></div><div class="name">${esc(p.name)}</div><div class="headline">${esc(p.busy || p.headline)}</div></div>
-      ${p.detail ? `<div class="detail">${esc(p.detail)}</div>` : ""}<div class="folder">${esc(p.folder)}</div>${notes}<div class="acts-main">${mainBtns.join("")}</div>${toggles}<div class="meta">${meta}</div><div class="row">${b.join("")}</div></div>`;
+    if (p.outside_samples.length) notes += `<div class="note">${p.outside_samples.length} sample${p.outside_samples.length > 1 ? "s are" : " is"} outside the project folder, so your friend will not get ${p.outside_samples.length > 1 ? "them" : "it"}:<ul>${p.outside_samples.slice(0, 6).map((c) => `<li>${esc(c)}</li>`).join("")}${p.outside_samples.length > 6 ? "<li>…</li>" : ""}</ul><div style="margin-top:8px"><button data-collect="${id}">Copy them into the project</button></div></div>`;
+    const people = p.shared ? "With " + p.members.filter((m) => m !== state.user).map(esc).join(", ") : "Only you so far";
+    const sub = [`<span class="folder" title="${esc(p.folder)}">${esc(shortFolder(p.folder))}</span>`, `<span>${people}</span>`];
+    if (p.last_sync) sub.push(`<span>Changed ${ago(p.last_sync)}</span>`);
+    sub.push(`<span>Old versions kept ${p.retention_days || 3} days${p.role === "owner" ? ` (<a href="#" data-lifetime="${id}">change</a>)` : ""}</span>`);
+    return `<div class="card pick ${esc(p.state)} ${id === selected ? "sel" : ""}" data-select="${id}" title="Click to see this project's history"><div class="top"><i class="led ${ledFor(p.state)}"></i><div class="name">${esc(p.name)}</div><div class="headline">${esc(p.busy || p.headline)}</div><div class="acts-main">${mainBtns.join("")}</div></div>
+      ${p.detail ? `<div class="detail">${esc(p.detail)}</div>` : ""}${notes}<div class="sub">${sub.join("")}${toggles}</div>${b.length ? `<div class="row">${b.join("")}</div>` : ""}</div>`;
   }).join("");
 }
 
@@ -374,10 +502,19 @@ document.addEventListener("click", (e) => {
   else if (t.id === "quit") { if (confirm("Quit Hénōsis? Projects stop syncing until it is started again.")) act("/api/quit", {}, () => { document.body.innerHTML = '<main><div class="card">Hénōsis has stopped. You can close this window.</div></main>'; }); }
   else if (t.id === "copyLog") copyText(logLines.map((l) => `${l.time} ${l.level.toUpperCase().padEnd(5)} ${l.text}`).join("\n"), "Console copied");
   else if (t.id === "clearLog") { logLines = []; errorsSeen = 0; drawLog(); }
-  else if (t.id === "toggleLog") { const c = $("#console"); c.classList.toggle("closed"); t.textContent = c.classList.contains("closed") ? "Show" : "Hide"; errorsSeen = 0; drawLog(); saveConsole(); }
+  else if (t.id === "toggleLog" || (t.closest("#consoleBar") && !t.closest("button, label, input"))) toggleConsole();
   else if (t.id === "detail") { drawLog(); saveConsole(); }
-  else { const card = t.closest("[data-select]"); if (card && !t.closest("button, a, input") && card.dataset.select !== selected) { selected = card.dataset.select; history = null; render(); loadHistory(); } }
+  else { const card = t.closest("[data-select]"); if (card && !t.closest("button, a, input, label, details") && card.dataset.select !== selected) { selected = card.dataset.select; history = null; render(); loadHistory(); } }
+  // A press inside a menu, or anywhere outside it, closes it.
+  document.querySelectorAll("details.more[open], #sessionMore[open]").forEach((d) => { if (!d.contains(t) || (t.closest("button") && d.querySelector(".menu,.panel")?.contains(t) && d.classList.contains("more"))) { d.open = false; if (d.dataset.menu === openMenu) openMenu = null; } });
 });
+// A card's ⋯ menu stays open across the page's refreshes.
+document.addEventListener("toggle", (e) => {
+  const d = e.target;
+  if (!(d instanceof HTMLDetailsElement) || !d.dataset.menu) return;
+  if (d.open) { openMenu = d.dataset.menu; document.querySelectorAll("details.more[open]").forEach((o) => { if (o !== d) o.open = false; }); }
+  else if (openMenu === d.dataset.menu) openMenu = null;
+}, true);
 // Auto-send / auto-update toggle handler.
 document.addEventListener("change", (e) => {
   const t = e.target; if (!(t instanceof HTMLInputElement)) return;
@@ -401,7 +538,10 @@ function loadConsole() {
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem("console") || "{}"); } catch (e) {}
   if (saved.height) $("#lines").style.height = saved.height + "px";
-  if (saved.closed) { $("#console").classList.add("closed"); $("#toggleLog").textContent = "Show"; }
+  // Closed unless you left it open.
+  const open = saved.closed === false;
+  $("#console").classList.toggle("closed", !open);
+  $("#toggleLog").textContent = open ? "Close" : "Open";
   if (saved.detail) $("#detail").checked = true;
 }
 function saveConsole() {
@@ -502,11 +642,18 @@ document.addEventListener("drop", async (e) => {
   await addFolder(dropped.name, dropped.files);
 });
 
+function toggleConsole() {
+  const c = $("#console"); c.classList.toggle("closed");
+  $("#toggleLog").textContent = c.classList.contains("closed") ? "Open" : "Close";
+  errorsSeen = 0; drawLog(); saveConsole();
+}
 function drawLog() {
   const box = $("#lines"), detail = $("#detail").checked, atEnd = box.scrollTop + box.clientHeight >= box.scrollHeight - 30;
   box.innerHTML = logLines.filter((l) => detail || l.level !== "debug").map((l) => `<div class="${esc(l.level)}"><span>${esc(l.time)}</span> ${l.level === "error" ? "ERROR " : ""}${esc(l.text)}</div>`).join("");
   if (atEnd) box.scrollTop = box.scrollHeight;
   $("#count").textContent = $("#console").classList.contains("closed") && errorsSeen ? errorsSeen + " new error" + (errorsSeen > 1 ? "s" : "") : "";
+  const last = logLines.filter((l) => detail || l.level !== "debug").slice(-1)[0];
+  $("#lastLine").textContent = last ? `${last.time}  ${last.text}` : "";
 }
 function addLocal(level, text) { logLines.push({time: new Date().toTimeString().slice(0, 8), level, text}); if (level === "error") errorsSeen++; drawLog(); }
 async function pollLog() {

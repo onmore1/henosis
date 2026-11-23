@@ -22,7 +22,7 @@ import (
 
 // Version is the release of the app. It is a variable so a test can build
 // an "older" app.
-var Version = "0.6.0"
+var Version = "0.7.0"
 
 // Agent runs one worker per linked project and carries out what the user
 // asks for on the status page.

@@ -2,6 +2,27 @@
 
 The release workflow takes the notes for a version from the section below.
 
+## 0.7.0
+
+Download **Henosis.exe** and double-click it.
+
+- **Connect from anywhere.** Your friend no longer needs to be on your Wi-Fi
+  or on Tailscale. When no direct address works, the two apps meet through a
+  small relay on Cloudflare. Nothing to set up: paste the code and press Join.
+  Your friend's bar says whether you are connected directly or through the
+  relay.
+- **A calmer window.** The session is a bar across the top: whether
+  everything is synced, who is in, how you are connected, and the invite code
+  with a copy button. Each project shows its status and one main button,
+  **Open in FL Studio**; the rest (show in File Explorer, sync now, stop
+  syncing, remove) is in its ⋯ menu.
+- **Send and update by hand.** Turn off Auto-send or Auto-update on a project
+  and its **Send changes** or **Update now** button appears next to it.
+- **Three color themes**: dark, light and teal, from the dots at the top
+  right. The window remembers your pick.
+- The console is a one-line strip at the bottom that shows what the app last
+  did and counts new errors. Click it to open the full log.
+
 ## 0.5.0
 
 Download **Henosis.exe** and double-click it.
