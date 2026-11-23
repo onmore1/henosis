@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hénōsis</title>
+<link rel="icon" href="/favicon.ico" sizes="any">
 <style>
 :root,[data-theme="dark"]{--bg:#14151a;--card:#1d1f27;--line:#2c2f3a;--text:#e9e9ee;--dim:#9a9cab;--accent:#ff8a3d;--ok:#4cc38a;--warn:#f2c14e;--bad:#ef6461;--blue:#6aa9ff;--btn-bg:#2a2d39;--input-bg:#12131a;--note-bg:#262019;--note-border:#4a3b22;--console-bg:#0d0e12;--target-bg:#22201a;--drop-over-bg:#221c14;--log-debug:#6f7285;--log-info:#cfd0da;--btn-main-text:#1a1206;--shadow:0 4px 12px rgba(0,0,0,.5);--danger-border:#5a2b2b}
 [data-theme="light"]{--bg:#F8FAFC;--card:#FFFFFF;--line:#BCCCDC;--text:#1a2332;--dim:#5a6b7d;--accent:#2563eb;--ok:#059669;--warn:#d97706;--bad:#dc2626;--blue:#0891b2;--btn-bg:#D9EAFD;--input-bg:#FFFFFF;--note-bg:#FEF3C7;--note-border:#FCD34D;--console-bg:#F1F5F9;--target-bg:#DBEAFE;--drop-over-bg:#DBEAFE;--log-debug:#9AA6B2;--log-info:#334155;--btn-main-text:#FFFFFF;--shadow:0 4px 12px rgba(15,23,42,.15);--danger-border:#FCA5A5}
@@ -503,8 +504,17 @@ function renderHistory() {
   put("commentLabel", target ? `Comment on ${number(target)} ("${esc(target.message || "Saved")}")` : "Comment");
 }
 
+// The version this page was loaded from. After an update the app answers
+// with a new one; the page then reloads itself, so the window shows the new
+// interface (and icon) without being closed and opened again.
+let pageVersion = null;
 async function refresh(force) {
-  try { state = await api("/api/state"); render(); }
+  try {
+    state = await api("/api/state");
+    if (pageVersion && state.version !== pageVersion) { location.reload(); return; }
+    pageVersion = state.version;
+    render();
+  }
   catch (e) { if (force) toast("The Hénōsis app is not answering. Is it still running?", true); }
 }
 async function loadHistory() {

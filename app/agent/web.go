@@ -16,6 +16,12 @@ import (
 //go:embed page.html
 var page []byte
 
+// favicon is the asterisk. The app window and its taskbar button take their
+// icon from it.
+//
+//go:embed favicon.ico
+var favicon []byte
+
 // Handler serves the status page and its API. It is meant for 127.0.0.1
 // only: requests that name another host, come from another site, or lack the
 // page's own header are refused, so no web page can drive the app.
@@ -29,6 +35,11 @@ func (a *Agent) Handler() http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Content-Security-Policy", "default-src 'self' 'unsafe-inline'; frame-ancestors 'none'")
 		w.Write(page)
+	})
+	mux.HandleFunc("GET /favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/x-icon")
+		w.Header().Set("Cache-Control", "max-age=86400")
+		w.Write(favicon)
 	})
 	mux.HandleFunc("GET /api/state", func(w http.ResponseWriter, r *http.Request) { reply(w, a.State(), nil) })
 	mux.HandleFunc("GET /api/projects/{id}/history", func(w http.ResponseWriter, r *http.Request) {

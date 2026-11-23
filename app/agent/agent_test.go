@@ -787,3 +787,22 @@ func TestJoiningStartsClean(t *testing.T) {
 		t.Fatal("the old project's files were touched")
 	}
 }
+
+func TestTheWindowHasTheLogoAsItsIcon(t *testing.T) {
+	d := newDesk(t, "ann")
+	resp, err := http.Get(d.page.URL + "/favicon.ico")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 || resp.Header.Get("Content-Type") != "image/x-icon" || !bytes.HasPrefix(data, []byte{0, 0, 1, 0}) {
+		t.Fatalf("favicon: %d %q %d bytes", resp.StatusCode, resp.Header.Get("Content-Type"), len(data))
+	}
+	page, _ := http.Get(d.page.URL + "/")
+	body, _ := io.ReadAll(page.Body)
+	page.Body.Close()
+	if !strings.Contains(string(body), `rel="icon" href="/favicon.ico"`) {
+		t.Fatal("the page does not link its icon")
+	}
+}

@@ -2,6 +2,13 @@
 
 The release workflow takes the notes for a version from the section below.
 
+## 0.7.5
+
+- **The logo is the app's icon**: on Henosis.exe in File Explorer, on the
+  window, and on its taskbar button.
+- After an update, an open Hénōsis window reloads by itself, so it shows the
+  new version instead of the old one until it is reopened.
+
 ## 0.7.3
 
 - **No more endless "a newer version arrived first".** A project folder that
