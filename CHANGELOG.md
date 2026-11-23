@@ -2,6 +2,14 @@
 
 The release workflow takes the notes for a version from the section below.
 
+## 0.7.3
+
+- **No more endless "a newer version arrived first".** A project folder that
+  was synced in an earlier session kept that session's sync state, so when a
+  project of the same name in a new session used the same folder, Hénōsis
+  retried every few seconds and never synced. The old state is now set aside;
+  nothing is lost, and a file that differs is kept as a conflict copy.
+
 ## 0.7.2
 
 - **Samples are found by name**, like FL Studio does, when the path stored

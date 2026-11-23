@@ -973,3 +973,63 @@ func TestCleanTrash(t *testing.T) {
 		t.Fatal("the trash folder still has entries")
 	}
 }
+
+// A folder synced with one project, then used for another (a project of the
+// same name in a later session), must not keep the first project's base:
+// pull would say "nothing new" and push "someone was first", forever.
+func TestFolderReusedForAnotherProject(t *testing.T) {
+	for _, otherHasVersions := range []bool{false, true} {
+		t.Run(fmt.Sprintf("other project has versions: %v", otherHasVersions), func(t *testing.T) {
+			dir := t.TempDir()
+			st, err := store.Open(filepath.Join(dir, "server"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			st.Now = time.Now
+			ann, _, _ := st.AddUser("ann")
+			old, _ := st.CreateProject(ann.ID, "get hi get buck")
+			folder := filepath.Join(dir, "get hi get buck")
+			write(t, folder, "beat.flp", "v1")
+			first := engine.Open(folder, &store.ProjectRemote{Store: st, UserID: ann.ID, ProjectID: old.ID, Device: "pc"}, "ann")
+			if _, err := first.Sync(engine.PushOptions{}); err != nil {
+				t.Fatal(err)
+			}
+
+			// A new session: same folder, different project.
+			fresh, _ := st.CreateProject(ann.ID, "get hi get buck")
+			remote := &store.ProjectRemote{Store: st, UserID: ann.ID, ProjectID: fresh.ID, Device: "pc"}
+			if otherHasVersions {
+				elsewhere := filepath.Join(dir, "elsewhere")
+				write(t, elsewhere, "beat.flp", "their v1")
+				write(t, elsewhere, "kick.wav", "kick")
+				if _, err := engine.Open(elsewhere, remote, "ann").Sync(engine.PushOptions{}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			write(t, folder, "beat.flp", "v2 here")
+			second := engine.Open(folder, remote, "ann")
+			if _, err := second.Sync(engine.PushOptions{}); err != nil {
+				t.Fatalf("sync in a reused folder: %v", err)
+			}
+			p, _ := st.Project(ann.ID, fresh.ID)
+			if p.Head == "" || second.BaseID() != p.Head {
+				t.Fatalf("not synced: head %q, base %q", p.Head, second.BaseID())
+			}
+			got := tree(folder)
+			if !otherHasVersions && got["beat.flp"] != "v2 here" {
+				t.Fatalf("the local file was changed: %v", got)
+			}
+			if otherHasVersions {
+				// Both versions are kept (as with any conflict), and their
+				// other file arrived.
+				contents := map[string]bool{}
+				for _, content := range got {
+					contents[content] = true
+				}
+				if !contents["v2 here"] || !contents["their v1"] || got["kick.wav"] != "kick" || len(got) != 3 {
+					t.Fatalf("after the merge: %v", got)
+				}
+			}
+		})
+	}
+}

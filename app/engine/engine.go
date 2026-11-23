@@ -346,6 +346,29 @@ func (e *Engine) Pull() (Result, error) {
 	if err != nil {
 		return res, fail(KindRemote, "%v", err)
 	}
+	if e.state.BaseSnapshot != "" && headID != e.state.BaseSnapshot {
+		// The folder says it was synced to a version this project does not
+		// have: it was synced with another project before (an earlier
+		// session), or the version expired. Pulling and pushing from that
+		// base would disagree with the remote forever, so the base becomes
+		// unknown. Nothing is lost: identical files simply match, and a
+		// differing one is kept as a conflict copy.
+		known := headID != ""
+		if known {
+			if _, err := e.Remote.Manifest(e.state.BaseSnapshot); errors.Is(err, ErrNotFound) {
+				known = false
+			} else if err != nil {
+				return res, fail(KindRemote, "%v", err)
+			}
+		}
+		if !known {
+			e.base, e.state = core.Manifest{}, state{}
+			if err := e.saveState(); err != nil {
+				return res, fail(KindLocalIO, "cannot save the local state: %v", err)
+			}
+			res.SnapshotID = ""
+		}
+	}
 	if headID == "" || headID == e.state.BaseSnapshot {
 		return res, nil
 	}
