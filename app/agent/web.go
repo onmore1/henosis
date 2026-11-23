@@ -120,6 +120,10 @@ func (a *Agent) Handler() http.Handler {
 		token, err := a.HostStart(in.Port, in.Name)
 		return map[string]string{"token": token}, err
 	})
+	post("/api/host/start-new", func(r *http.Request, in body) (any, error) {
+		token, err := a.HostStartNew(in.Port, in.Name)
+		return map[string]string{"token": token}, err
+	})
 	post("/api/connect", func(r *http.Request, in body) (any, error) { return nil, a.Connect(in.Name, in.Code) })
 	post("/api/host/new-code", func(r *http.Request, in body) (any, error) { return nil, a.HostNewCode() })
 	post("/api/host/extra", func(r *http.Request, in body) (any, error) { return nil, a.HostSetExtra(in.Text) })

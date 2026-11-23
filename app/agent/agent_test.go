@@ -703,3 +703,52 @@ func TestConnectThroughTheRelay(t *testing.T) {
 		return string(data) == "v3 from ann"
 	})
 }
+
+// TestStartANewSession: leaving and pressing Start used to reopen the old
+// session silently, adding an account per new name. The start screen now
+// shows the session this computer holds, and a new one can be started.
+func TestStartANewSession(t *testing.T) {
+	ann, bob := newDesk(t, "ann"), newDesk(t, "bob")
+	if ann.state().Previous != nil {
+		t.Fatal("a fresh computer claims to hold a session")
+	}
+	ann.ok("/api/host/start", map[string]any{"name": "ann", "port": 0}, nil)
+	oldCode := ann.state().Host.Code
+	folder := filepath.Join(ann.home, "Beats", "Old Song")
+	os.MkdirAll(folder, 0o755)
+	os.WriteFile(filepath.Join(folder, "Old Song.flp"), []byte("old"), 0o644)
+	ann.ok("/api/create", map[string]string{"folder": folder}, nil)
+	bob.ok("/api/connect", map[string]string{"name": "bob", "code": oldCode}, nil)
+
+	ann.ok("/api/logout", nil, nil)
+	prev := ann.state().Previous
+	if prev == nil || prev.Projects != 1 || strings.Join(prev.People, ",") != "ann,bob" && strings.Join(prev.People, ",") != "bob,ann" {
+		t.Fatalf("the start screen's session: %+v", prev)
+	}
+
+	ann.ok("/api/host/start-new", map[string]any{"name": "ann"}, nil)
+	st := ann.state()
+	if !st.SignedIn || st.User != "ann" || len(st.Host.Accounts) != 1 || len(st.Projects) != 0 || st.Previous != nil {
+		t.Fatalf("after starting a new session: signed in %v as %q, accounts %v, %d projects", st.SignedIn, st.User, st.Host.Accounts, len(st.Projects))
+	}
+	if st.Host.Code == oldCode {
+		t.Fatal("the new session kept the old code")
+	}
+	if data, _ := os.ReadFile(filepath.Join(folder, "Old Song.flp")); string(data) != "old" {
+		t.Fatal("the project's files were touched")
+	}
+	dirs, _ := filepath.Glob(filepath.Join(ann.home, "server-data-*"))
+	if len(dirs) != 1 {
+		t.Fatalf("the old session was not set aside: %v", dirs)
+	}
+	carl := newDesk(t, "carl")
+	if code, text := carl.call("POST", "/api/connect", map[string]string{"name": "carl", "code": oldCode}, nil); code != 400 {
+		t.Fatalf("the old code still lets people in: %d %s", code, text)
+	}
+	carl.ok("/api/connect", map[string]string{"name": "carl", "code": st.Host.Code}, nil)
+
+	// Starting new while signed in is refused rather than pulling the rug.
+	if code, _ := ann.call("POST", "/api/host/start-new", map[string]any{"name": "ann"}, nil); code != 400 {
+		t.Fatal("start-new worked while signed in")
+	}
+}

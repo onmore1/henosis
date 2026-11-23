@@ -159,6 +159,8 @@ h2 .hint{color:var(--dim);font-size:13px}
 .waiting .headline,.attention .headline{color:var(--warn)!important}
 
 .layout>div>h2:first-child{margin-top:4px}
+.prev{margin-top:14px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--panel);font-size:14px;color:var(--dim)}
+.prev b{color:var(--text);display:block;margin-bottom:2px}
 .addcard{margin-top:6px;padding:14px 18px}
 .addcard #drop{display:flex;align-items:center;gap:14px;flex-wrap:wrap;text-align:left;padding:14px 16px;border-width:1.5px}
 .addcard #drop .help{margin:0}
@@ -267,7 +269,18 @@ function render() {
     $("#app").innerHTML = mode === "out" ? signedOut() : signedIn(mode === "hosting");
   }
   put("who", state.signed_in ? `${esc(state.user)} on ${esc(state.device)}` : "");
-  if (mode === "out") return;
+  if (mode === "out") {
+    const prev = state.previous_session;
+    const plural = (n, one, many) => n === 0 ? `no ${many}` : `${n} ${n === 1 ? one : many}`;
+    put("startArea", prev
+      ? `<div class="prev"><b>This computer already has a session</b>
+          <div>${esc(prev.people.join(", "))}, with ${plural(prev.projects, "project", "projects")}.</div>
+          <div class="help" style="margin:4px 0 0">To come back to it, type your name from that list. A new name adds another person to it.</div></div>
+        <div class="row" style="margin-left:0"><button class="main big" id="startSession">Continue this session</button></div>
+        <div class="row" style="margin-left:0"><button class="big" id="startNew">Start a new, empty session</button></div>`
+      : `<div class="row" style="margin-left:0"><button class="main big" id="startSession">Start a session</button></div>`);
+    return;
+  }
   if (!state.projects.some((p) => p.project_id === selected)) selected = state.projects.length ? state.projects[0].project_id : null;
   const h = state.host;
   if (mode === "hosting") {
@@ -305,7 +318,7 @@ function signedOut() {
     <h2>What is your name?</h2>
     <div class="help">Your friend sees this name on everything you save.</div>
     <input id="myName" class="big" placeholder="your name" autocomplete="off" maxlength="32">
-    <div class="row" style="margin-left:0"><button class="main big" id="startSession">Start a session</button></div>
+    <div id="startArea"></div>
     <div class="step"><b>1</b><div>Press this on the computer that keeps the projects, usually yours.</div></div>
     <div class="step"><b>2</b><div>You get a code. Send it to your friend.</div></div>
     <div class="step"><b>3</b><div>Add your FL Studio projects. Your friend gets them automatically.</div></div>
@@ -486,6 +499,10 @@ document.addEventListener("click", (e) => {
   else if (d.link) act("/api/link", {project_id: d.link, folder: ""});
   else if (d.suggest) { const s = suggestions[+d.suggest]; if (s) act("/api/create", s.loose ? {file: s.file} : {folder: s.folder}, () => toast(`${s.name} added`)); }
   else if (t.id === "startSession") act("/api/host/start", {name: val("myName")});
+  else if (t.id === "startNew") {
+    const prev = state.previous_session || {people: [], projects: 0};
+    if (confirm(`Start a new, empty session?\n\nThe current one (${prev.people.length} people, ${prev.projects} project${prev.projects === 1 ? "" : "s"}) is set aside in a folder on this computer, not deleted. Your project files stay where they are.\n\nFriends will need the new code.`)) act("/api/host/start-new", {name: val("myName")});
+  }
   else if (t.id === "joinSession") act("/api/connect", {name: val("myName"), code: val("joinCode")}, () => toast("Connected"));
   else if (t.id === "login") act("/api/login", {server: val("server"), token: val("token")});
   else if (t.id === "copyCode") copyText(state.host.code, "Code copied. Send it to your friend.");

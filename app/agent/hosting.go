@@ -402,6 +402,72 @@ func (a *Agent) HostStart(port int, name string) (token string, err error) {
 	return token, a.Login(local, token)
 }
 
+// PreviousSession is a session this computer holds: who is in it and how
+// many projects it has.
+type PreviousSession struct {
+	People   []string `json:"people"`
+	Projects int      `json:"projects"`
+}
+
+// previousSession describes the session held in dir, or in running when the
+// server is up. Nil when there is none.
+func previousSession(running *store.Store, dir string) *PreviousSession {
+	st := running
+	if st == nil {
+		if _, err := os.Stat(filepath.Join(dir, "users.json")); err != nil {
+			return nil
+		}
+		opened, err := store.Open(dir)
+		if err != nil {
+			return nil
+		}
+		st = opened
+	}
+	users := st.Users()
+	if len(users) == 0 {
+		return nil
+	}
+	ps := &PreviousSession{People: []string{}}
+	for _, u := range users {
+		ps.People = append(ps.People, u.Name)
+	}
+	ps.Projects = len(st.Projects(users[0].ID)) // everyone sees every project
+	return ps
+}
+
+// HostStartNew starts an empty session. The old session's data is moved aside
+// to a dated folder next to it, not deleted; the project folders on this
+// computer are not touched, only unlinked from the old session. Friends need
+// the new code.
+func (a *Agent) HostStartNew(port int, name string) (string, error) {
+	a.mu.Lock()
+	if a.cfg.SignedIn() {
+		a.mu.Unlock()
+		return "", errors.New("leave the session first")
+	}
+	a.stopHosting()
+	dir := a.hostDir()
+	if _, err := os.Stat(dir); err == nil {
+		aside := dir + "-" + time.Now().Format("2006-01-02-150405")
+		if err := os.Rename(dir, aside); err != nil {
+			a.mu.Unlock()
+			return "", fmt.Errorf("could not set the old session aside: %w", err)
+		}
+		a.logf("info", "server: the previous session was set aside in %s", aside)
+	}
+	for id := range a.runners {
+		a.stopRunner(id)
+	}
+	a.cfg.Host.JoinSecret = "" // a new session gets a new code
+	a.cfg.Links, a.cfg.Skipped = nil, nil
+	if err := a.cfg.Save(); err != nil {
+		a.mu.Unlock()
+		return "", err
+	}
+	a.mu.Unlock()
+	return a.HostStart(port, name)
+}
+
 // HostStop stops being the server. The stored projects stay on disk.
 func (a *Agent) HostStop() error {
 	a.mu.Lock()

@@ -18,6 +18,7 @@ import (
 	"henosis/config"
 	"henosis/core"
 	"henosis/fl"
+	"henosis/store"
 )
 
 // Version is the release of the app. It is a variable so a test can build
@@ -404,6 +405,9 @@ type AppState struct {
 	Host     HostState          `json:"host"`
 	// Autostart: "on", "off", or "" where it does not apply.
 	Autostart string `json:"autostart"`
+	// Previous is the session this computer holds, shown on the start screen
+	// so "Start a session" does not silently reopen it.
+	Previous *PreviousSession `json:"previous_session,omitempty"`
 }
 
 // State reports the app's current state.
@@ -420,7 +424,15 @@ func (a *Agent) State() AppState {
 	}
 	cl := a.cl
 	st.Host = a.hostState()
+	var running *store.Store
+	if a.host.srv != nil {
+		running = a.host.st
+	}
+	dir := a.hostDir()
 	a.mu.Unlock()
+	if !st.SignedIn {
+		st.Previous = previousSession(running, dir)
+	}
 	st.Autostart = a.autostartState()
 	sort.Slice(st.Projects, func(i, j int) bool {
 		return strings.ToLower(st.Projects[i].Name) < strings.ToLower(st.Projects[j].Name)
