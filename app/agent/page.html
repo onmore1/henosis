@@ -558,6 +558,14 @@ function copyText(text, done) {
 
 document.addEventListener("click", (e) => {
   const t = e.target; if (!(t instanceof HTMLElement)) return;
+  // Links to the project's pages open in the default browser, through the
+  // app: the app window may not open new windows by itself.
+  const ext = t.closest("a[target=_blank]");
+  if (ext && ext.href) {
+    e.preventDefault();
+    api("/api/open-link", {text: ext.href}).then(() => toast("Opened in your browser")).catch(() => window.open(ext.href, "_blank", "noopener"));
+    return;
+  }
   // Theme switcher
   const themeBtn = t.closest("#themes button");
   if (themeBtn) { applyTheme(themeBtn.dataset.set); e.stopPropagation(); return; }

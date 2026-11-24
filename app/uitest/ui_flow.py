@@ -248,6 +248,8 @@ try:
         check("Report a problem opens a GitHub issue with the version",
               href.startswith("https://github.com/onmore1/henosis/issues/new?body=") and "on Windows" in urllib.parse.unquote(href))
         check("no update notice while none is out", not ann.is_visible("#updateBar"))
+        ann.click("#report")
+        wait("Report a problem asking the app to open the browser", lambda: "> open-link" in ann.text_content("#lines"), 10)
 
         def with_update(route):
             resp = route.fetch()

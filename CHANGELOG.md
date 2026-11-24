@@ -2,7 +2,7 @@
 
 The release workflow takes the notes for a version from the section below.
 
-## 0.8.0
+## 0.8.1
 
 The first version for everyone: download it, double-click, connect.
 
@@ -11,16 +11,21 @@ The first version for everyone: download it, double-click, connect.
 - **Encrypted end to end.** Everything that passes through the relay is
   encrypted with keys made from the invite code, and the relay is only told a
   hash of the code. It can neither read your projects nor join your session.
-  Both of you need 0.8.0 or newer to connect through the relay.
+  Both of you need 0.8.1 or newer to connect through the relay.
 - **Tells you when there is a new version**, with a Download button.
 - **Report a problem** at the bottom of the window opens a GitHub issue with
-  your version filled in.
+  your version filled in, in your default browser (the Download button too).
 - **Clearer errors when joining**: the app says whether the relay is out of
   its daily allowance, your friend runs another version, or nobody is there.
 - The relay carries many more people on the same free plan: waiting
   connections are renewed every 10 minutes instead of 2, dead ones are found
   by their missing ping answers, data goes in larger pieces, and a relay that
   is down or full is retried less and less often instead of every 3 seconds.
+- **A new download always takes over** from the copy already running. It used
+  to give up when the running copy was slow to answer (its friend's computer
+  gone), and the old version kept running.
+- The window no longer freezes for up to 20 seconds when the session's
+  computer cannot be reached.
 - `HENOSIS_FORCE_RELAY=1` makes the app skip direct addresses when joining,
   to test the relay from one network.
 

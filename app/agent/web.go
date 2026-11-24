@@ -42,6 +42,11 @@ func (a *Agent) Handler() http.Handler {
 		w.Write(favicon)
 	})
 	mux.HandleFunc("GET /api/state", func(w http.ResponseWriter, r *http.Request) { reply(w, a.State(), nil) })
+	// The version alone, at once: a newer copy of the app asks it before
+	// taking over.
+	mux.HandleFunc("GET /api/version", func(w http.ResponseWriter, r *http.Request) {
+		reply(w, map[string]string{"version": Version}, nil)
+	})
 	mux.HandleFunc("GET /api/projects/{id}/history", func(w http.ResponseWriter, r *http.Request) {
 		worker, err := a.Worker(r.PathValue("id"))
 		if err != nil {
@@ -120,6 +125,15 @@ func (a *Agent) Handler() http.Handler {
 	post("/api/login", func(r *http.Request, in body) (any, error) { return nil, a.Login(in.Server, in.Token) })
 	post("/api/logout", func(r *http.Request, in body) (any, error) { return nil, a.Logout() })
 	post("/api/quit", func(r *http.Request, in body) (any, error) { a.Quit(); return nil, nil })
+	// Links to the project's pages (Report a problem, Download) open in the
+	// default browser from here: the app window does not reliably open new
+	// windows itself. Only this project's pages can be opened.
+	post("/api/open-link", func(r *http.Request, in body) (any, error) {
+		if !strings.HasPrefix(in.Text, Repo+"/") || strings.ContainsAny(in.Text, " \"\n\r\t<>") {
+			return nil, errors.New("only Hénōsis's own pages can be opened")
+		}
+		return nil, a.OpenLink(in.Text)
+	})
 	post("/api/ui-error", func(r *http.Request, in body) (any, error) {
 		if len(in.Text) > 2000 {
 			in.Text = in.Text[:2000]

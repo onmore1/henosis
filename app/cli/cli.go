@@ -112,17 +112,28 @@ func (e *env) pageURL() string { return "http://127.0.0.1:" + strconv.Itoa(e.cfg
 // runningVersion returns the version of the app answering on this computer,
 // or "" when none does.
 func (e *env) runningVersion() string {
-	c := http.Client{Timeout: 700 * time.Millisecond}
-	resp, err := c.Get(e.pageURL() + "/api/state")
-	if err != nil {
-		return ""
+	// /api/version answers at once. Versions before 0.8.1 only have
+	// /api/state, which can take a while when their server is slow, so they
+	// get longer.
+	for _, try := range []struct {
+		path string
+		wait time.Duration
+	}{{"/api/version", 2 * time.Second}, {"/api/state", 30 * time.Second}} {
+		c := http.Client{Timeout: try.wait}
+		resp, err := c.Get(e.pageURL() + try.path)
+		if err != nil {
+			return "" // nothing is listening, or it is not Henosis
+		}
+		var st struct {
+			Version string `json:"version"`
+		}
+		ok := resp.StatusCode == 200 && json.NewDecoder(resp.Body).Decode(&st) == nil && st.Version != ""
+		resp.Body.Close()
+		if ok {
+			return st.Version
+		}
 	}
-	defer resp.Body.Close()
-	var st agent.AppState
-	if resp.StatusCode != 200 || json.NewDecoder(resp.Body).Decode(&st) != nil {
-		return ""
-	}
-	return st.Version
+	return ""
 }
 
 // appRunning reports whether the background app answers on this computer.

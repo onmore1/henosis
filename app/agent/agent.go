@@ -24,7 +24,7 @@ import (
 
 // Version is the release of the app. It is a variable so a test can build
 // an "older" app.
-var Version = "0.8.0"
+var Version = "0.8.1"
 
 // Agent runs one worker per linked project and carries out what the user
 // asks for on the status page.
@@ -34,6 +34,9 @@ type Agent struct {
 	// that changes them does not race agents still running.
 	releasesURL, version string
 	updateDelay          time.Duration
+
+	// OpenURL, when set, replaces opening a page in the default browser.
+	OpenURL func(url string) error
 
 	// Log, when set, also receives every line of the debug console.
 	Log    func(format string, args ...any)
@@ -76,6 +79,8 @@ type Agent struct {
 	listMu   sync.Mutex
 	listAt   time.Time
 	listed   []core.ProjectView
+	listing  chan struct{} // closed when the list being fetched arrives
+	listGen  int           // bumped by forgetList, so a fetch begun before it does not count as fresh
 	quitOnce sync.Once
 	quit     chan struct{}
 }
@@ -462,22 +467,49 @@ func (a *Agent) State() AppState {
 }
 
 // serverProjects lists the account's projects, asking the server at most
-// every few seconds.
+// every few seconds. It never holds the status page up for long: when the
+// server is slow (a friend's computer that went away, reached through the
+// relay) it waits a moment and then answers with the last list it had.
 func (a *Agent) serverProjects(cl *client.Client) []core.ProjectView {
 	a.listMu.Lock()
-	defer a.listMu.Unlock()
-	if time.Since(a.listAt) > 5*time.Second {
-		if list, err := cl.Projects(); err == nil {
-			a.listed = list
-		}
-		a.listAt = time.Now()
+	if time.Since(a.listAt) > 5*time.Second && a.listing == nil {
+		done := make(chan struct{})
+		a.listing = done
+		gen := a.listGen
+		go func() {
+			list, err := cl.Projects()
+			a.listMu.Lock()
+			if err == nil {
+				a.listed = list
+			}
+			if gen == a.listGen {
+				a.listAt = time.Now()
+			}
+			a.listing = nil
+			a.listMu.Unlock()
+			close(done)
+		}()
 	}
+	waiting := a.listing
+	a.listMu.Unlock()
+	if waiting != nil {
+		select {
+		case <-waiting:
+		case <-time.After(listWait):
+		}
+	}
+	a.listMu.Lock()
+	defer a.listMu.Unlock()
 	return a.listed
 }
+
+// listWait is the longest the status page waits for the server's list.
+var listWait = 1500 * time.Millisecond
 
 func (a *Agent) forgetList() {
 	a.listMu.Lock()
 	a.listAt = time.Time{}
+	a.listGen++
 	a.listMu.Unlock()
 }
 

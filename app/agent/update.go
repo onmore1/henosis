@@ -118,3 +118,11 @@ func parseVersion(s string) ([3]int, bool) {
 	}
 	return v, true
 }
+
+// OpenLink opens a web page in the default browser. Tests replace it.
+func (a *Agent) OpenLink(url string) error {
+	if a.OpenURL != nil {
+		return a.OpenURL(url)
+	}
+	return OpenBrowser(url)
+}
