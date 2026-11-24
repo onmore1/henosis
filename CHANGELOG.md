@@ -2,6 +2,26 @@
 
 The release workflow takes the notes for a version from the section below.
 
+## 0.8.0
+
+The first version for everyone: download it, double-click, connect.
+
+- **Works out of the box.** The Hénōsis relay is built in, so a friend
+  anywhere connects with just the invite code, no Tailscale and no setup.
+- **Encrypted end to end.** Everything that passes through the relay is
+  encrypted with keys made from the invite code, and the relay is only told a
+  hash of the code. It can neither read your projects nor join your session.
+  Both of you need 0.8.0 or newer to connect through the relay.
+- **Tells you when there is a new version**, with a Download button.
+- **Report a problem** at the bottom of the window opens a GitHub issue with
+  your version filled in.
+- **Clearer errors when joining**: the app says whether the relay is out of
+  its daily allowance, your friend runs another version, or nobody is there.
+- The relay carries many more people on the same free plan: waiting
+  connections are renewed every 10 minutes instead of 2, dead ones are found
+  by their missing ping answers, data goes in larger pieces, and a relay that
+  is down or full is retried less and less often instead of every 3 seconds.
+
 ## 0.7.5
 
 - **The logo is the app's icon**: on Henosis.exe in File Explorer, on the

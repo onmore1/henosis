@@ -113,11 +113,16 @@ func dialWS(ctx context.Context, urlStr string) (*wsConn, error) {
 		raw.Close()
 		return nil, err
 	}
-	resp.Body.Close()
 	if resp.StatusCode != http.StatusSwitchingProtocols {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		resp.Body.Close()
 		raw.Close()
+		if overLimit(resp.StatusCode, string(body)) {
+			return nil, ErrRelayBusy
+		}
 		return nil, fmt.Errorf("relay: upgrade failed: %s", resp.Status)
 	}
+	resp.Body.Close()
 	// Verify the server's Sec-WebSocket-Accept.
 	h := sha1.New()
 	h.Write([]byte(keyB64))
@@ -130,6 +135,24 @@ func dialWS(ctx context.Context, urlStr string) (*wsConn, error) {
 	}
 	raw.SetDeadline(time.Time{})
 	return &wsConn{raw: raw, br: br}, nil
+}
+
+// ErrRelayBusy means the relay turned the connection away for being over a
+// limit: most likely the free plan's daily allowance, which Cloudflare resets
+// at midnight UTC.
+var ErrRelayBusy = errors.New("the free relay has used up today's allowance (it resets at midnight UTC); try again later, or connect directly")
+
+// overLimit tells a relay that is over a limit from other failures.
+// Cloudflare answers 429 (error 1027 on the free plan) once the daily
+// requests are used up, and a Durable Object over its free allowance makes
+// the Worker throw ("Exceeded allowed ... free tier") which comes back as a
+// 5xx with that text.
+func overLimit(status int, body string) bool {
+	if status == http.StatusTooManyRequests {
+		return true
+	}
+	b := strings.ToLower(body)
+	return status >= 500 && (strings.Contains(b, "1027") || strings.Contains(b, "exceeded") || strings.Contains(b, "free tier") || strings.Contains(b, "limit"))
 }
 
 func hostOnly(hostPort string) string {

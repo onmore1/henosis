@@ -27,6 +27,7 @@ type tunnelConn struct {
 	wDeadl   time.Time
 	pingTick *time.Ticker
 	stop     chan struct{}
+	heard    atomic.Int64 // when anything last came from the relay (UnixNano)
 }
 
 // pingEvery is how often an open tunnel sends a WebSocket ping. A variable
@@ -39,6 +40,7 @@ func init() { pingEvery.Store(int64(25 * time.Second)) }
 // relay's intermediate load balancers from reaping the socket.
 func newTunnelConn(ws *wsConn) *tunnelConn {
 	t := &tunnelConn{ws: ws, stop: make(chan struct{})}
+	t.heard.Store(time.Now().UnixNano())
 	t.pingTick = time.NewTicker(time.Duration(pingEvery.Load()))
 	go t.keepAlive()
 	return t
@@ -50,6 +52,14 @@ func (t *tunnelConn) keepAlive() {
 		case <-t.stop:
 			return
 		case <-t.pingTick.C:
+			// The relay answers every ping. A socket that has heard nothing
+			// for three rounds is dead even if the network has not said so
+			// (a sleeping laptop, a dropped NAT entry): close it, so the
+			// reader gets an error and a fresh socket replaces it.
+			if time.Since(time.Unix(0, t.heard.Load())) > 3*time.Duration(pingEvery.Load()) {
+				t.ws.raw.Close()
+				return
+			}
 			if err := t.ws.writeFrame(opPing, nil, true); err != nil {
 				return
 			}
@@ -70,6 +80,7 @@ func (t *tunnelConn) Read(p []byte) (int, error) {
 		if err != nil {
 			return 0, err
 		}
+		t.heard.Store(time.Now().UnixNano())
 		switch op {
 		case opBinary, opContinuation:
 			if len(data) == 0 {
@@ -120,6 +131,7 @@ func (t *tunnelConn) waitPaired(timeout time.Duration) error {
 		if err != nil {
 			return err
 		}
+		t.heard.Store(time.Now().UnixNano())
 		if op == opText && string(data) == "OK" {
 			return nil
 		}

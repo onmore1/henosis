@@ -76,13 +76,14 @@ func (c *Config) RelayURL() string {
 	return DefaultRelay
 }
 
-// DefaultRelay is the relay built into this copy of the app, so a friend who
-// downloads it needs to set nothing. Set at build time with
+// DefaultRelay is the relay built into the app, so someone who downloads it
+// needs to set nothing: the official Hénōsis relay. It only ever sees a hash
+// of the session code and encrypted bytes. A build can name another with
 //
 //	-ldflags "-X henosis/config.DefaultRelay=https://henosis-relay.<account>.workers.dev"
 //
 // A relay typed under Advanced, or HENOSIS_RELAY, takes precedence.
-var DefaultRelay = ""
+var DefaultRelay = "https://henosis-relay.vadym-henosis.workers.dev"
 
 // Relay is persisted in config.json. Use RelayURL to read the effective value.
 

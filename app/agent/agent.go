@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"henosis/agent/relay"
@@ -23,11 +24,17 @@ import (
 
 // Version is the release of the app. It is a variable so a test can build
 // an "older" app.
-var Version = "0.7.5"
+var Version = "0.8.0"
 
 // Agent runs one worker per linked project and carries out what the user
 // asks for on the status page.
 type Agent struct {
+	update atomic.Pointer[UpdateInfo] // a newer release, once one is found
+	// Taken from the package settings when the agent is made, so a test
+	// that changes them does not race agents still running.
+	releasesURL, version string
+	updateDelay          time.Duration
+
 	// Log, when set, also receives every line of the debug console.
 	Log    func(format string, args ...any)
 	Timing Timing
@@ -104,6 +111,7 @@ func New(cfg *config.Config, det fl.Detector) *Agent {
 	a := &Agent{
 		Log: func(string, ...any) {}, Timing: DefaultTiming(), TickEvery: time.Second, Events: NewLogBuffer(2000), AutoLinkEvery: 4 * time.Second,
 		cfg: cfg, det: &cachedDetector{inner: det}, runners: map[string]*runner{}, quit: make(chan struct{}),
+		releasesURL: ReleasesURL, version: Version, updateDelay: UpdateCheckDelay,
 	}
 	a.connect() // no worker runs before Start
 	return a
@@ -126,6 +134,7 @@ func (a *Agent) Start(ctx context.Context) {
 	ctx, a.stopAll = context.WithCancel(ctx)
 	a.ctx = ctx
 	a.logf("info", "Henosis %s started. Settings: %s", Version, a.cfg.Path())
+	go a.watchUpdates(ctx)
 	if a.cfg.Host.Enabled {
 		if err := a.startHosting(a.cfg.Host.Port); err != nil {
 			a.logf("error", "the server on this computer could not start: %v", err)
@@ -408,13 +417,18 @@ type AppState struct {
 	// Previous is the session this computer holds, shown on the start screen
 	// so "Start a session" does not silently reopen it.
 	Previous *PreviousSession `json:"previous_session,omitempty"`
+	// Update is a newer release, once one is found.
+	Update *UpdateInfo `json:"update,omitempty"`
+	// Repo is the project page, for "Report a problem".
+	Repo string `json:"repo"`
 }
 
 // State reports the app's current state.
 func (a *Agent) State() AppState {
 	a.mu.Lock()
 	st := AppState{Version: Version, SignedIn: a.cfg.SignedIn(), Server: a.cfg.Server, User: a.cfg.User,
-		Device: a.cfg.Device, Projects: []Status{}, Unlinked: []core.ProjectView{}, Suggest: a.folderFor("")}
+		Device: a.cfg.Device, Projects: []Status{}, Unlinked: []core.ProjectView{}, Suggest: a.folderFor(""),
+		Update: a.update.Load(), Repo: Repo}
 	linked := map[string]bool{}
 	for _, link := range a.cfg.Links {
 		linked[link.ProjectID] = true

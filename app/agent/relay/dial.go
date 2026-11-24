@@ -11,11 +11,12 @@ import (
 	"time"
 )
 
-// Dial opens a tunneled net.Conn to the host that is registered on the
-// relay under the given 32-char hex code. Returns a net.Conn that can be
-// handed to http.Transport.DialContext.
-func Dial(ctx context.Context, relayURL, code string) (net.Conn, error) {
-	ws, err := dialWS(ctx, buildURL(relayURL, "/dial", code))
+// Dial opens an encrypted, tunneled net.Conn to the host that waits on the
+// relay for this session secret (32 hex characters). The relay is only told
+// RouteCode(secret). Returns a net.Conn that can be handed to
+// http.Transport.DialContext.
+func Dial(ctx context.Context, relayURL, secret string) (net.Conn, error) {
+	ws, err := dialWS(ctx, buildURL(relayURL, "/dial", RouteCode(secret)))
 	if err != nil {
 		return nil, fmt.Errorf("relay: dial: %w", err)
 	}
@@ -28,7 +29,12 @@ func Dial(ctx context.Context, relayURL, code string) (net.Conn, error) {
 		t.Close()
 		return nil, fmt.Errorf("relay: no host listening for this code: %w", err)
 	}
-	return t, nil
+	sc, err := secureClient(t, secret, 15*time.Second)
+	if err != nil {
+		t.Close()
+		return nil, err
+	}
+	return sc, nil
 }
 
 // NewHTTPClient returns an http.Client whose Transport dials a fresh
@@ -36,16 +42,19 @@ func Dial(ctx context.Context, relayURL, code string) (net.Conn, error) {
 // http:// URL; the host and path pass through to the far side's HTTP
 // server. The URL host is ignored for routing (the code decides); it only
 // serves as the Host: header.
-func NewHTTPClient(relayURL, code string) *http.Client {
+func NewHTTPClient(relayURL, secret string) *http.Client {
 	tr := &http.Transport{
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			return Dial(ctx, relayURL, code)
+			return Dial(ctx, relayURL, secret)
 		},
 		DisableKeepAlives:     false,
 		MaxIdleConns:          4,
 		MaxIdleConnsPerHost:   4,
 		IdleConnTimeout:       90 * time.Second,
 		ResponseHeaderTimeout: 30 * time.Second,
+		// Big buffers make big relay messages: fewer of them, fewer billed.
+		WriteBufferSize: maxChunk,
+		ReadBufferSize:  maxChunk,
 	}
 	return &http.Client{Transport: tr, Timeout: 60 * time.Second}
 }

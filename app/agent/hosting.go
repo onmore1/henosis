@@ -27,13 +27,13 @@ import (
 
 // hosting is the server running inside the app, when this computer hosts.
 type hosting struct {
-	st         *store.Store
-	srv        *http.Server
-	port       int
-	problem    string
-	stop       chan struct{}
-	relayStop  context.CancelFunc // cancels the relay acceptor, if running
-	relayURL   string             // the relay the acceptor is talking to
+	st        *store.Store
+	srv       *http.Server
+	port      int
+	problem   string
+	stop      chan struct{}
+	relayStop context.CancelFunc // cancels the relay acceptor, if running
+	relayURL  string             // the relay the acceptor is talking to
 }
 
 // HostState is what the status page shows about the built-in server.
@@ -307,24 +307,31 @@ func (a *Agent) Connect(name, code string) error {
 	}
 	// No direct address worked — try the relay, if one is configured.
 	var relayClient *http.Client
+	var relayErr error
 	if server == "" {
 		if url := a.cfg.RelayURL(); url != "" {
 			a.logf("info", "connect: no direct address worked; trying the relay")
+			relayErr = probeRelay(url, secret)
 			rc := relay.NewHTTPClient(url, secret)
-			if client.ReachableWithClient("http://relay", rc) {
+			if relayErr == nil && client.ReachableWithClient("http://relay", rc) {
 				server = "http://relay"
 				relayClient = rc
 			} else {
-				a.logf("debug", "connect: relay did not pair; is Henosis open on the host?")
+				a.logf("debug", "connect: the relay did not pair: %v", relayErr)
 			}
 		}
 	}
 	if server == "" {
 		hint := "Is Henosis open there, and are you both on the same network or both on Tailscale?"
-		if a.cfg.RelayURL() == "" {
+		switch {
+		case a.cfg.RelayURL() == "":
 			hint += " You can also set a relay URL under Advanced to connect from anywhere."
-		} else {
-			hint = "Is Henosis open on your friend's computer?"
+		case errors.Is(relayErr, relay.ErrRelayBusy):
+			hint = "The relay: " + relayErr.Error() + "."
+		case errors.Is(relayErr, relay.ErrOtherVersion):
+			hint = fmt.Sprintf("Your friend's computer runs a different version of Hénōsis (this one is %s). Update both to the newest version from %s/releases/latest.", Version, Repo)
+		default:
+			hint = fmt.Sprintf("Is Hénōsis open on your friend's computer, and is it version %s like this one?", Version)
 		}
 		return fmt.Errorf("could not reach your friend's computer (tried %s). %s", strings.Join(addresses, ", "), hint)
 	}
@@ -552,4 +559,17 @@ func SelfCommand(args string) string {
 		return ""
 	}
 	return strings.TrimSpace(`"` + self + `" ` + args)
+}
+
+// probeRelay opens one tunnel to the host through the relay and closes it,
+// so a failure can be told apart: a full relay, another version, or nobody
+// there.
+func probeRelay(url, secret string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+	c, err := relay.Dial(ctx, url, secret)
+	if err != nil {
+		return err
+	}
+	return c.Close()
 }

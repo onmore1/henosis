@@ -5,7 +5,7 @@ Usage: ui_flow.py PATH_TO_HENOSIS_AGENT [PATH_TO_A_FLP]
 Needs Python with playwright and an installed Chrome. Prints one line per
 check and exits non-zero if any of them failed.
 """
-import os, shutil, subprocess, sys, tempfile, time
+import os, shutil, subprocess, sys, tempfile, time, urllib.parse
 from playwright.sync_api import sync_playwright
 
 agent = os.path.abspath(sys.argv[1])
@@ -242,9 +242,27 @@ try:
         # --- a change on disk needs no click --------------------------------
         open(os.path.join(song, "kick.wav"), "wb").write(b"kick")
         wait("the new file reaching the friend", file_is(os.path.join(bob_song, "kick.wav"), b"kick"), 30)
+        # --- the footer and the update notice --------------------------------
+        here = os.path.dirname(os.path.abspath(__file__))
+        href = ann.get_attribute("#report", "href") or ""
+        check("Report a problem opens a GitHub issue with the version",
+              href.startswith("https://github.com/onmore1/henosis/issues/new?body=") and "on Windows" in urllib.parse.unquote(href))
+        check("no update notice while none is out", not ann.is_visible("#updateBar"))
+
+        def with_update(route):
+            resp = route.fetch()
+            data = resp.json()
+            data["update"] = {"version": "9.9.9", "url": "https://github.com/onmore1/henosis/releases/tag/v9.9.9"}
+            route.fulfill(response=resp, json=data)
+        ann.route("**/api/state", with_update)
+        wait("the update notice", lambda: ann.is_visible("#updateBar"), 10)
+        check("the notice names the new version and links its page",
+              "9.9.9" in ann.inner_text("#updateBar") and (ann.get_attribute("#updateBar a", "href") or "").endswith("/v9.9.9"))
+        ann.screenshot(path=os.path.join(here, "last-run-update.png"))
+        ann.unroute("**/api/state")
+        wait("the notice going away again", lambda: not ann.is_visible("#updateBar"), 10)
         check("no script errors in either window", errors == [])
 
-        here = os.path.dirname(os.path.abspath(__file__))
         ann.screenshot(path=os.path.join(here, "last-run-host.png"))
         bob.screenshot(path=os.path.join(here, "last-run-friend.png"))
         bob.goto(f"http://127.0.0.1:{BOB_PORT}/")   # the first screen, for the record

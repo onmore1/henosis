@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	mrand "math/rand"
 	"io"
 	"log"
+	mrand "math/rand"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -17,7 +17,11 @@ import (
 // by a fresh one. A variable so tests can make it short.
 var renewEvery atomic.Int64
 
-func init() { renewEvery.Store(int64(2 * time.Minute)) }
+// Waiting sockets are replaced every renewEvery (plus some jitter), in case
+// the relay lost one without closing it. Each replacement is a billed relay
+// request, so this is slow; dead sockets are caught sooner by the ping
+// watchdog in conn.go.
+func init() { renewEvery.Store(int64(10 * time.Minute)) }
 
 // HostAcceptor keeps a small pool of WebSockets open to the relay, each
 // waiting to be paired with an incoming friend dial. When a pair happens,
@@ -28,10 +32,36 @@ func init() { renewEvery.Store(int64(2 * time.Minute)) }
 // session code; Hénōsis creates one when hosting starts.
 type HostAcceptor struct {
 	RelayURL  string // "https://henosis-relay.xxx.workers.dev"
-	Code      string // 32-char hex, derived from the session secret
+	Code      string // the session secret, 32 hex chars; the relay only sees RouteCode(Code)
 	LocalAddr string // "127.0.0.1:47800"
 	PoolSize  int    // how many acceptors to keep in flight (default 2)
 	Logf      func(format string, args ...any)
+
+	mu       sync.Mutex
+	failures int
+}
+
+// retryAfter is how long the acceptor waits after the first failure; each
+// failure in a row doubles it, up to maxRetryAfter. A relay that is down or
+// over its daily allowance is not hammered.
+var retryAfter, maxRetryAfter = 3 * time.Second, 5 * time.Minute
+
+func (h *HostAcceptor) backoff(failed bool) time.Duration {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if !failed {
+		h.failures = 0
+		return 0
+	}
+	h.failures++
+	wait := retryAfter
+	for i := 1; i < h.failures && wait < maxRetryAfter; i++ {
+		wait *= 2
+	}
+	if wait > maxRetryAfter {
+		wait = maxRetryAfter
+	}
+	return wait
 }
 
 // Run blocks until ctx is cancelled. It maintains PoolSize goroutines, each
@@ -59,14 +89,17 @@ func (h *HostAcceptor) Run(ctx context.Context) {
 			release := func() { once.Do(func() { <-sem }) }
 			defer release()
 			if err := h.acceptOnce(ctx, release); err != nil {
-				h.logf("relay accept: %v", err)
-				// Back off a little before trying again, so a misconfigured
-				// relay does not spin us flat out.
+				// Back off before trying again, longer each time in a row,
+				// so a relay that is down or full is not hammered.
+				wait := h.backoff(true)
+				h.logf("relay accept: %v (trying again in %s)", err, wait.Round(time.Second))
 				select {
 				case <-ctx.Done():
-				case <-time.After(3 * time.Second):
+				case <-time.After(wait):
 				}
+				return
 			}
+			h.backoff(false)
 		}()
 	}
 }
@@ -75,7 +108,7 @@ func (h *HostAcceptor) Run(ctx context.Context) {
 // is paired with it, before piping, so the caller can open the next one.
 func (h *HostAcceptor) acceptOnce(ctx context.Context, paired func()) error {
 	dialCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
-	ws, err := dialWS(dialCtx, buildURL(h.RelayURL, "/accept", h.Code))
+	ws, err := dialWS(dialCtx, buildURL(h.RelayURL, "/accept", RouteCode(h.Code)))
 	cancel()
 	if err != nil {
 		return fmt.Errorf("accept dial: %w", err)
@@ -104,24 +137,39 @@ func (h *HostAcceptor) acceptOnce(ctx context.Context, paired func()) error {
 		}
 	}
 	paired()
+	sc, err := secureServer(t, h.Code, 15*time.Second)
+	if err != nil {
+		t.Close()
+		if errors.Is(err, ErrWrongSecret) || errors.Is(err, ErrOtherVersion) {
+			h.logf("relay: turned away a connection: %v", err)
+			return nil
+		}
+		return fmt.Errorf("handshake: %w", err)
+	}
 	// Paired — connect to the local HTTP server and pipe.
 	local, err := (&net.Dialer{Timeout: 3 * time.Second}).DialContext(ctx, "tcp", h.LocalAddr)
 	if err != nil {
-		t.Close()
+		sc.Close()
 		return fmt.Errorf("dial local %s: %w", h.LocalAddr, err)
 	}
 	h.logf("relay: paired a friend, piping to %s", h.LocalAddr)
-	stop := context.AfterFunc(ctx, func() { t.Close(); local.Close() })
+	stop := context.AfterFunc(ctx, func() { sc.Close(); local.Close() })
 	defer stop()
-	pipe(t, local)
+	pipe(sc, local)
 	return nil
 }
 
 // pipe shuttles bytes between a and b, closes both when either side ends.
 func pipe(a, b net.Conn) {
 	done := make(chan struct{}, 2)
-	go func() { io.Copy(a, b); done <- struct{}{} }()
-	go func() { io.Copy(b, a); done <- struct{}{} }()
+	// Plain readers/writers, so io.CopyBuffer really uses the big buffer
+	// (a big buffer makes big, and so fewer, relay messages).
+	cp := func(dst io.Writer, src io.Reader) {
+		io.CopyBuffer(struct{ io.Writer }{dst}, struct{ io.Reader }{src}, make([]byte, maxChunk))
+		done <- struct{}{}
+	}
+	go cp(a, b)
+	go cp(b, a)
 	<-done
 	a.Close()
 	b.Close()

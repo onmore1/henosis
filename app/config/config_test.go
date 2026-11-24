@@ -103,6 +103,10 @@ func TestCleanFolderAndDevice(t *testing.T) {
 func TestRelayURLPrecedence(t *testing.T) {
 	old := DefaultRelay
 	defer func() { DefaultRelay = old }()
+	if !strings.HasPrefix(old, "https://") {
+		t.Fatalf("the app has no relay built in (%q): downloads would not connect on their own", old)
+	}
+	DefaultRelay = ""
 	t.Setenv("HENOSIS_RELAY", "")
 	c := &Config{}
 	if c.RelayURL() != "" {

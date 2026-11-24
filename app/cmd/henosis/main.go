@@ -8,7 +8,8 @@ import (
 
 	"henosis/cli"
 )
-//allllllllllllllllllah
+
+// allllllllllllllllllah
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()

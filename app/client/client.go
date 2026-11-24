@@ -14,7 +14,8 @@ import (
 
 	"henosis/core"
 )
-//gavanashkaeewe
+
+// gavanashkaeewe
 // Client is a signed-in connection to one server.
 type Client struct {
 	BaseURL string // for example "https://henosis.example.com"

@@ -44,18 +44,26 @@ jobs:
 
       - name: Run the tests
         working-directory: app
-        run: go test ./...
+        run: |
+          go vet ./...
+          go test -race ./...
+
+      - name: Test the relay Worker
+        working-directory: worker
+        run: node --test --test-force-exit test/*.test.mjs
 
       - name: Build the programs
         working-directory: app
         env:
           CGO_ENABLED: "0"
-          # The relay built into the app (Settings > Secrets and variables >
-          # Actions > Variables > HENOSIS_RELAY). Empty builds have no relay.
+          # The official relay is built in (config.DefaultRelay). To build
+          # with another, set the repository variable HENOSIS_RELAY.
           RELAY: ${{ vars.HENOSIS_RELAY }}
         run: |
           mkdir -p ../dist/tools
-          GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -H=windowsgui -X henosis/config.DefaultRelay=$RELAY" -o ../dist/Henosis.exe ./cmd/henosis-agent
+          relay_flag=""
+          [ -n "$RELAY" ] && relay_flag="-X henosis/config.DefaultRelay=$RELAY"
+          GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -H=windowsgui $relay_flag" -o ../dist/Henosis.exe ./cmd/henosis-agent
           GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o ../dist/tools/henosis-cli.exe ./cmd/henosis
           GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o ../dist/tools/henosis-server.exe ./cmd/henosis-server
           GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o ../dist/tools/henosis-server-linux ./cmd/henosis-server

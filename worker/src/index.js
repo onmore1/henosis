@@ -15,8 +15,17 @@
 //   GET /                     — a line of text with the version
 //   GET /accept?code=<hex32>  (WebSocket) — host side
 //   GET /dial?code=<hex32>    (WebSocket) — friend side
+//
+// The code is a hash of the session secret, and everything passed on is
+// encrypted by the two apps, so the relay can neither join a session nor
+// read a project.
 
-export const VERSION = "2";
+export const VERSION = "3";
+
+// Limits per session code, so one broken or hostile app cannot pile up
+// sockets. An app keeps 2 waiting sockets per session; a friend opens a few.
+export const MAX_WAITING = { accept: 6, dial: 8 };
+export const MAX_SOCKETS = 40;
 
 export default {
   async fetch(request, env) {
@@ -32,7 +41,16 @@ export default {
       return new Response("websocket required", { status: 426 });
     }
     const stub = env.RENDEZVOUS.get(env.RENDEZVOUS.idFromName(code));
-    return stub.fetch(request);
+    try {
+      return await stub.fetch(request);
+    } catch (e) {
+      // Past the free plan's Durable Object allowance the call throws
+      // ("Exceeded allowed ..."). 429 is what the app reads as "the relay is
+      // out of today's allowance"; anything else is a plain failure.
+      const msg = String((e && e.message) || e);
+      const full = /exceeded|limit/i.test(msg);
+      return new Response(full ? "relay over its daily allowance" : "relay error", { status: full ? 429 : 503 });
+    }
   },
 };
 
@@ -46,6 +64,17 @@ export class Rendezvous {
     const side = new URL(request.url).pathname === "/accept" ? "accept" : "dial";
     const other = side === "accept" ? "dial" : "accept";
     const id = crypto.randomUUID();
+
+    const open = this.ctx.getWebSockets();
+    const waiting = this.ctx.getWebSockets(side).filter((ws) => {
+      const a = ws.deserializeAttachment();
+      return a && !a.peer;
+    });
+    if (open.length >= MAX_SOCKETS || waiting.length >= MAX_WAITING[side]) {
+      // 409, not 429: the app reads 429 as "the relay is out of its daily
+      // allowance".
+      return new Response("too many connections for this session", { status: 409 });
+    }
 
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);

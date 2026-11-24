@@ -25,7 +25,7 @@ class FakeCtx {
   getWebSockets(tag) { return this.sockets.filter((w) => w.readyState !== 3 && (!tag || w.tags.includes(tag))); }
 }
 
-const { default: worker, Rendezvous, VERSION } = await import("../src/index.js");
+const { default: worker, Rendezvous, VERSION, MAX_WAITING, MAX_SOCKETS } = await import("../src/index.js");
 const CODE = "00112233445566778899aabbccddeeff";
 const req = (path, code = CODE, ws = true) =>
   new Request(`https://relay.test${path}?code=${code}`, { headers: ws ? { Upgrade: "websocket" } : {} });
@@ -114,4 +114,35 @@ test("the Worker answers the root, refuses bad codes and plain requests", async 
   assert.equal((await worker.fetch(req("/dial", "nothex"), env)).status, 400);
   assert.equal((await worker.fetch(req("/dial", CODE, false), env)).status, 426);
   assert.equal((await worker.fetch(req("/dial"), env)).body, "room");
+});
+
+test("one session cannot pile up waiting sockets", async () => {
+  const r = room();
+  for (let i = 0; i < MAX_WAITING.accept; i++) await open(r, "/accept");
+  const resp = await r.fetch(req("/accept"));
+  assert.equal(resp.status, 409);
+  // A friend can still get through, and pairing frees a place.
+  const friend = await open(r, "/dial");
+  assert.deepEqual(friend.sent, ["OK"]);
+  assert.equal((await r.fetch(req("/accept"))).status, 101);
+});
+
+test("a session has a ceiling on all its sockets", async () => {
+  const r = room();
+  let made = 0;
+  while (made < MAX_SOCKETS) {
+    await open(r, "/accept");
+    await open(r, "/dial");
+    made += 2;
+  }
+  assert.equal((await r.fetch(req("/dial"))).status, 409);
+  assert.equal((await r.fetch(req("/accept"))).status, 409);
+});
+
+test("a Durable Object over its allowance becomes 429, other failures 503", async () => {
+  const throwing = (msg) => ({ RENDEZVOUS: { idFromName: (n) => n, get: () => ({ fetch: async () => { throw new Error(msg); } }) } });
+  const r1 = await worker.fetch(req("/dial"), throwing("Exceeded allowed volume of requests in Durable Objects free tier."));
+  assert.equal(r1.status, 429);
+  const r2 = await worker.fetch(req("/dial"), throwing("Network connection lost."));
+  assert.equal(r2.status, 503);
 });
