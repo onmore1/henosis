@@ -21,6 +21,8 @@ The first version for everyone: download it, double-click, connect.
   connections are renewed every 10 minutes instead of 2, dead ones are found
   by their missing ping answers, data goes in larger pieces, and a relay that
   is down or full is retried less and less often instead of every 3 seconds.
+- `HENOSIS_FORCE_RELAY=1` makes the app skip direct addresses when joining,
+  to test the relay from one network.
 
 ## 0.7.5
 

@@ -287,6 +287,14 @@ func (a *Agent) Connect(name, code string) error {
 	}
 	a.mu.Unlock()
 
+	// HENOSIS_FORCE_RELAY=1 skips the direct addresses, to test the relay or
+	// to get round a network that answers but misbehaves.
+	tried := addresses
+	if os.Getenv("HENOSIS_FORCE_RELAY") == "1" {
+		a.logf("info", "connect: HENOSIS_FORCE_RELAY is set; going straight to the relay")
+		addresses = nil
+	}
+
 	// Try every direct address at once; the first that answers wins.
 	found := make(chan string, len(addresses))
 	for _, address := range addresses {
@@ -333,7 +341,7 @@ func (a *Agent) Connect(name, code string) error {
 		default:
 			hint = fmt.Sprintf("Is Hénōsis open on your friend's computer, and is it version %s like this one?", Version)
 		}
-		return fmt.Errorf("could not reach your friend's computer (tried %s). %s", strings.Join(addresses, ", "), hint)
+		return fmt.Errorf("could not reach your friend's computer (tried %s). %s", strings.Join(tried, ", "), hint)
 	}
 	if relayClient != nil {
 		a.logf("info", "connect: paired through the relay")

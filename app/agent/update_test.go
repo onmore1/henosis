@@ -116,3 +116,19 @@ func TestJoiningSaysWhyTheRelayFailed(t *testing.T) {
 		t.Errorf("with nobody at the relay: %d %s", status, text)
 	}
 }
+
+// HENOSIS_FORCE_RELAY makes a friend on the same network go through the
+// relay, the way a friend far away would.
+func TestForceRelay(t *testing.T) {
+	relaySrv := relaytest.NewServer()
+	defer relaySrv.Close()
+	ann, bob := newDesk(t, "ann"), newDesk(t, "bob")
+	ann.ok("/api/host/relay", map[string]string{"text": relaySrv.URL}, nil)
+	ann.ok("/api/host/start", map[string]any{"name": "ann", "port": 0}, nil)
+	bob.ok("/api/host/relay", map[string]string{"text": relaySrv.URL}, nil)
+	t.Setenv("HENOSIS_FORCE_RELAY", "1")
+	bob.ok("/api/connect", map[string]string{"name": "bob", "code": ann.state().Host.Code}, nil)
+	if s := bob.state(); !strings.HasPrefix(s.Server, "relay://") {
+		t.Fatalf("bob reached %q directly although the relay was forced", s.Server)
+	}
+}
